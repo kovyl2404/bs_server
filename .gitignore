@@ -5,3 +5,4 @@ ebin/
 *.iws
 *.iml
 .idea/
+.eunit/
