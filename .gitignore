@@ -1,0 +1,7 @@
+deps/
+ebin/
+*.beam
+*.ipr
+*.iws
+*.iml
+.idea/

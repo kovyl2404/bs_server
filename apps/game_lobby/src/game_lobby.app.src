@@ -1,0 +1,12 @@
+{application, game_lobby,
+ [
+  {description, "Manages requests for game, decides someone with whom to connect"},
+  {vsn, "0.0.1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { game_lobby, []}},
+  {env, []}
+ ]}.
