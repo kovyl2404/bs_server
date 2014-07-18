@@ -200,6 +200,57 @@ reconnect_after_illegal_turn_test_() ->
         ?_assert( SessionShutdownTime > 1500000 andalso SessionShutdownTime < 2500000 )
     ].
 
+peer_lost_turn_test_() ->
+    ClientFun = fun() -> receive #peer_turn{} -> ok end end,
+
+    {ok, SessionPid} =
+        game_session:start_link(
+            #peer_id{ client_pid = self(), tag = <<"red">> },
+            #peer_id{ client_pid = spawn( ClientFun ), tag = <<"blue">>}
+        ),
+    {ok, _} = wait_game_start(100),
+    ok = game_session:make_turn(SessionPid, <<"red">>, <<"turn_data">>),
+    {ok, _} = wait_peer_lost(SessionPid, 100),
+
+    ok = game_session:set_peer(SessionPid, #peer_id{tag = <<"blue">>, client_pid = self()}),
+    TurnResult = wait_peer_turn(SessionPid, 100),
+    [
+        ?_assertMatch(
+            {ok, #peer_turn{session_pid = SessionPid, data = <<"turn_data">>}},
+            TurnResult
+        )
+    ].
+
+peer_ack_test_() ->
+    ClientFun =
+        fun() ->
+            #peer_turn{data = Data, session_pid = ActualSessionPid} =
+                receive
+                    #peer_turn{ } = Turn -> Turn
+                end,
+            ok = game_session:ack_turn(ActualSessionPid, <<"blue">>, Data)
+        end,
+    {ok, SessionPid} =
+        game_session:start_link(
+            #peer_id{ client_pid = self(), tag = <<"red">> },
+            #peer_id{ client_pid = spawn( ClientFun ), tag = <<"blue">>}
+        ),
+
+    {ok, _} = wait_game_start(100),
+    ok = game_session:make_turn(SessionPid, <<"red">>, <<"turn_data">>),
+    {ok, _} = wait_peer_lost(SessionPid, 100),
+
+    ok = game_session:set_peer(SessionPid, #peer_id{tag = <<"blue">>, client_pid = self()}),
+    TurnRepeatResult = wait_peer_turn(SessionPid, 100),
+
+    ok = game_session:make_turn(SessionPid, <<"blue">>, <<"next_turn_data">>),
+
+    TurnResult = wait_peer_turn(SessionPid, 100),
+    [
+        ?_assertMatch({error, timeout}, TurnRepeatResult),
+        ?_assertMatch({ok, #peer_turn{session_pid = SessionPid, data = <<"next_turn_data">>}}, TurnResult)
+    ].
+
 
 wait_from_pid(Pid, Timeout) ->
     receive

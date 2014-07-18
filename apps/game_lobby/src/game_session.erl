@@ -11,7 +11,8 @@
 -export([
     start_link/2,
     set_peer/2,
-    make_turn/3
+    make_turn/3,
+    ack_turn/3
 ]).
 
 %% gen_server callbacks
@@ -28,7 +29,8 @@
     state, {
         reconnect_timers    = [],
         peer_tags           = [],
-        peer_queue          = []
+        peer_queue          = [],
+        cur_turn            = undefined
     }
 ).
 
@@ -47,6 +49,9 @@ set_peer(SessionPid, PeerId) ->
 
 make_turn(SessionPid, PeerTag, Data) ->
     gen_server:cast(SessionPid, {turn, PeerTag, Data}).
+
+ack_turn(SessionPid, PeerTag, Data) ->
+    gen_server:cast(SessionPid, {ack_turn, PeerTag, Data}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -77,7 +82,8 @@ handle_cast(
     {set_peer, #peer_id{tag = Tag, client_pid = NewPeerPid}},
     #state{
         peer_tags = PeerTags,
-        reconnect_timers = ReconnectTimers
+        reconnect_timers = ReconnectTimers,
+        cur_turn = CurTurn
     } = State
 ) ->
     erlang:monitor(process, NewPeerPid),
@@ -85,10 +91,27 @@ handle_cast(
     OldPid ! #peer_change{session_pid = self()},
     NewPeerPid ! #game_start{session_pid = self(), tag = Tag},
     [ P ! #peer_reset{session_pid = self() } || {T, P} <- PeerTags, T =/= Tag],
+    ok = consider_repeat_turn(CurTurn, Tag, NewPeerPid),
     {noreply, State#state{
         peer_tags = orddict:store( Tag, NewPeerPid, PeerTags ),
         reconnect_timers = orddict:erase(Tag, ReconnectTimers)
     }};
+
+
+handle_cast(
+    {ack_turn, PeerTag, Data},
+    #state{
+        peer_queue = [ CurrentPeerTag, NextPeerTag ],
+        cur_turn = CurTurn
+    } = State
+) when CurTurn =:= {PeerTag, Data} ->
+    {noreply, State#state{
+        peer_queue = [NextPeerTag, CurrentPeerTag],
+        cur_turn = undefined
+    }};
+
+handle_cast( {ack, _, _}, State ) ->
+    {noreply, State};
 
 handle_cast(
     {turn, CurrentPeerTag, Data},
@@ -100,7 +123,7 @@ handle_cast(
     NextPeerPid = orddict:fetch(NextPeerTag, PeerTags),
     NextPeerPid ! #peer_turn{session_pid = self(), data = Data},
     {noreply, State#state{
-        peer_queue = [NextPeerTag, CurrentPeerTag]
+        cur_turn = {NextPeerTag, Data}
     }};
 
 handle_cast(
@@ -169,3 +192,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 
+consider_repeat_turn({Tag, Data}, Tag, NewPeerPid) ->
+    NewPeerPid ! #peer_turn{session_pid = self(), data = Data},
+    ok;
+consider_repeat_turn(_, _Tag, _NewPeerPid) ->
+    ok.
