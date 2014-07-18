@@ -2,24 +2,50 @@
 -define(GAME_LOBBY_COMMON_HRL, ok).
 -author("Viacheslav V. Kovalev").
 
+
 -record(
-    client_wait, {
-        key             = erlang:error(required, key)
+    peer_id, {
+        client_pid,
+        tag
+    }
+).
+
+
+-record(
+    game_start, {
+        session_pid,
+        tag
     }
 ).
 
 -record(
-    client_connected, {
-        key             = erlang:error(required, key),
-        client_info     = erlang:error(required, client_info)
+    peer_lost, {
+        session_pid
     }
 ).
 
 -record(
-    client_down, {
-        key             = erlang:error(required, key),
-        client_info     = erlang:error(required, client_info),
-        reason          = erlang:error(required, reason)        :: atom()
+    peer_reset, {
+        session_pid
+    }
+).
+
+-record(
+    peer_change, {
+        session_pid
+    }
+).
+
+-record(
+    peer_turn, {
+        session_pid,
+        data
+    }
+).
+
+-record(
+    illegal_turn, {
+        session_pid
     }
 ).
 

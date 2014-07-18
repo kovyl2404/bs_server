@@ -6,3 +6,4 @@ ebin/
 *.iml
 .idea/
 .eunit/
+out/

@@ -25,7 +25,7 @@ start(_StartType, _StartArgs) ->
     {ok, _ListenerPid} =
         ranch:start_listener(
             ?MODULE, ?DEFAULT_ACCEPTORS_COUNT, ranch_tcp, transport_options(),
-            connection_protocol, []
+            client_protocol, connection_options()
         ),
     client_session_sup:start_link().
 
@@ -46,3 +46,11 @@ start_deps() ->
 transport_options() ->
     {ok, Port} = application:get_env(client_session, port),
     [{port, Port}, {nodelay, false}].
+
+connection_options() ->
+    {ok, PingIntervalSec} = application:get_env(client_session, ping_interval_sec),
+    {ok, MaxPingsAllowed} = application:get_env(client_session, max_pings_allowed),
+    [
+        {ping_interval_sec, PingIntervalSec},
+        {max_pings_allowed, MaxPingsAllowed}
+    ].

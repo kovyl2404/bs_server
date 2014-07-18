@@ -6,9 +6,11 @@
   {applications, [
         kernel,
         stdlib,
-        gproc,
         ranch
   ]},
   {mod, { client_session, []}},
-  {env, []}
+  {env, [
+      {max_pings_allowed, 5},
+      {ping_interval_sec, 1}
+  ]}
  ]}.
