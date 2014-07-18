@@ -45,7 +45,12 @@ start_link(FirstPeer, SecondPeer) ->
     ).
 
 set_peer(SessionPid, PeerId) ->
-    gen_server:cast(SessionPid, {set_peer, PeerId}).
+    case (catch gen_server:call(SessionPid, {set_peer, PeerId})) of
+        {'EXIT', _} ->
+            {error, expired};
+        ok ->
+            ok
+    end.
 
 make_turn(SessionPid, PeerTag, Data) ->
     gen_server:cast(SessionPid, {turn, PeerTag, Data}).
@@ -74,12 +79,9 @@ init({
     }}.
 
 
-handle_call(_Request, _From, State) ->
-    {reply, ok, State}.
-
-
-handle_cast(
+handle_call(
     {set_peer, #peer_id{tag = Tag, client_pid = NewPeerPid}},
+    _From,
     #state{
         peer_tags = PeerTags,
         reconnect_timers = ReconnectTimers,
@@ -92,10 +94,10 @@ handle_cast(
     NewPeerPid ! #game_start{session_pid = self(), tag = Tag},
     [ P ! #peer_reset{session_pid = self() } || {T, P} <- PeerTags, T =/= Tag],
     ok = consider_repeat_turn(CurTurn, Tag, NewPeerPid),
-    {noreply, State#state{
+    {reply, ok, State#state{
         peer_tags = orddict:store( Tag, NewPeerPid, PeerTags ),
         reconnect_timers = orddict:erase(Tag, ReconnectTimers)
-    }};
+    }}.
 
 
 handle_cast(

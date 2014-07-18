@@ -251,6 +251,20 @@ peer_ack_test_() ->
         ?_assertMatch({ok, #peer_turn{session_pid = SessionPid, data = <<"next_turn_data">>}}, TurnResult)
     ].
 
+reconnect_expired_session_test_() ->
+    ClientFun = fun() -> wait_game_start() end,
+    {ok, SessionPid} =
+        game_session:start_link(
+            #peer_id{ client_pid = self(), tag = <<"red">> },
+            #peer_id{ client_pid = spawn( ClientFun ), tag = <<"blue">>}
+        ),
+    MonitorRef = monitor(process, SessionPid),
+    {ok, _} = wait_game_start(100),
+    ok = wait_process_down(MonitorRef, 2500),
+    SetPeerResult = game_session:set_peer(SessionPid, #peer_id{tag = <<"blue">>, client_pid = self()}),
+    [
+        ?_assertMatch({error, expired}, SetPeerResult)
+    ].
 
 wait_from_pid(Pid, Timeout) ->
     receive
