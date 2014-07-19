@@ -27,6 +27,9 @@ cleanup(_) ->
     ok = application:unload(client_session),
     ok = application:stop(ranch).
 
+before_test() ->
+    error_logger:tty(false).
+
 
 accept_connection_test_() ->
     fixture(
@@ -189,3 +192,6 @@ wait_ping(Socket, Timeout) ->
 %%
 %%         end
 %%     ).
+
+after_test() ->
+    error_logger:tty(false).

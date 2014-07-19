@@ -6,6 +6,7 @@
 -define(COUCH_HOST, "http://localhost:5984/").
 -define(COUCH_DB, "test").
 
+
 fixture(Inst) ->
     {setup,
         fun setup/0,
@@ -32,7 +33,11 @@ cleanup(_) ->
     ok = application:unload(database),
     ok = couchbeam:stop().
 
-basic_create_lookup_test_() ->
+
+before_test() ->
+    error_logger:tty(false).
+
+basic_create_lookup_test_disabled() ->
     fixture(
         fun(_) ->
             SaveResult =
@@ -50,7 +55,7 @@ basic_create_lookup_test_() ->
         end
     ).
 
-lookup_test_() ->
+lookup_test_disabled() ->
     Id = <<"kovyl2404">>,
     Password = <<"password">>,
     fixture(
@@ -79,3 +84,6 @@ ensure_db_absent(Host, Database) ->
     Server = couchbeam:server_connection(Host),
     couchbeam:delete_db(Server, Database),
     ok.
+
+after_test() ->
+    error_logger:tty(true).
