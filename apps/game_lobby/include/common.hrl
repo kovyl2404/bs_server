@@ -20,6 +20,14 @@
 ).
 
 -record(
+    game_stop, {
+        token,
+        session_pid,
+        tag
+    }
+).
+
+-record(
     peer_lost, {
         session_pid
     }

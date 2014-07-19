@@ -12,7 +12,8 @@
     start_link/3,
     set_peer/2,
     make_turn/3,
-    ack_turn/3
+    ack_turn/3,
+    stop_game/2
 ]).
 
 %% gen_server callbacks
@@ -58,6 +59,9 @@ make_turn(SessionPid, PeerTag, Data) ->
 
 ack_turn(SessionPid, PeerTag, Data) ->
     gen_server:cast(SessionPid, {ack_turn, PeerTag, Data}).
+
+stop_game(SessionPid, PeerTag) ->
+    gen_server:cast(SessionPid, {stop_game, PeerTag}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -150,6 +154,23 @@ handle_cast(
     {noreply, State#state{
         reconnect_timers = orddict:store(FailedPeerTag, TimerId, ReconnectTimers)
     }};
+
+handle_cast(
+    {stop_game, _Tag},
+    #state{
+        peer_tags = PeerTags,
+        game_token = Token
+    } = State
+) ->
+%%     case orddict:find(Tag, PeerTags) of
+%%
+%%     end,
+    [ P ! #game_stop{
+        session_pid = self(),
+        token = Token,
+        tag = T
+    } || {T, P} <- PeerTags ],
+    {stop, normal, State};
 
 handle_cast(_, State) ->
     {noreply, State}.

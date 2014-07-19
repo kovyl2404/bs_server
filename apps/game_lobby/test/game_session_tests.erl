@@ -221,6 +221,9 @@ peer_lost_turn_test_() ->
     {ok, _} = lobby_utils:wait_peer_lost(SessionPid, 100),
 
     ok = game_session:set_peer(SessionPid, #peer_id{tag = <<"blue">>, client_pid = self()}),
+    {ok, #game_start{tag = <<"blue">>, token = some_token, session_pid = SessionPid}} =
+        lobby_utils:wait_game_start(100),
+
     TurnResult = lobby_utils:wait_peer_turn(SessionPid, 100),
     [
         ?_assertMatch(
@@ -228,6 +231,7 @@ peer_lost_turn_test_() ->
             TurnResult
         )
     ].
+
 
 peer_ack_test_() ->
     ClientFun =
@@ -250,6 +254,8 @@ peer_ack_test_() ->
     {ok, _} = lobby_utils:wait_peer_lost(SessionPid, 100),
 
     ok = game_session:set_peer(SessionPid, #peer_id{tag = <<"blue">>, client_pid = self()}),
+    {ok, #game_start{tag = <<"blue">>, token = some_token, session_pid = SessionPid}} =
+        lobby_utils:wait_game_start(100),
     TurnRepeatResult = lobby_utils:wait_peer_turn(SessionPid, 100),
 
     ok = game_session:make_turn(SessionPid, <<"blue">>, <<"next_turn_data">>),
@@ -276,6 +282,133 @@ reconnect_expired_session_test_() ->
         ?_assertMatch({error, session_expired}, SetPeerResult)
     ].
 
+stop_game_in_turn_test_() ->
+    TestHost = self(),
+    ClientFun =
+        fun() ->
+            {ok, #game_start{
+                tag = Tag, session_pid = SessionPid,
+                token = Token
+            }} = lobby_utils:wait_game_start(),
+            {ok, #peer_turn{data = Data}} = lobby_utils:wait_peer_turn(SessionPid, 100),
+            ok = game_session:ack_turn(SessionPid, Tag, Data),
+            ok = game_session:stop_game(SessionPid, Tag),
+            StopResult = lobby_utils:wait_game_stop(Token, 100),
+            TestHost ! {self(), StopResult}
+        end,
+
+    ClientPid = spawn( ClientFun ),
+    {ok, SessionPid} =
+        game_session:start_link(
+            some_token,
+            #peer_id{ client_pid = self(), tag = <<"red">> },
+            #peer_id{ client_pid = ClientPid, tag = <<"blue">>}
+        ),
+    MonitorRef = monitor(process, SessionPid),
+    {ok, #game_start{
+        session_pid = SessionPid
+    }} = lobby_utils:wait_game_start(some_token),
+    ok = game_session:make_turn(SessionPid, <<"red">>, <<"some_turn">>),
+
+    GameStopResult = lobby_utils:wait_game_stop(some_token, 100),
+    SessionDownResult = lobby_utils:wait_process_down(MonitorRef, 100),
+    {ok, PeerStopResult} = lobby_utils:wait_from_pid(ClientPid, 100),
+
+    [
+        ?_assertMatch(
+            {ok, #game_stop{ token = some_token, tag = <<"red">>, session_pid = SessionPid} },
+            GameStopResult
+        ),
+        ?_assertMatch(
+            {ok, #game_stop{tag = <<"blue">>, token = some_token, session_pid = SessionPid}},
+            PeerStopResult
+        ),
+        ?_assertEqual(ok, SessionDownResult)
+    ].
+
+stop_game_no_turn_ack_test_() ->
+    TestHost = self(),
+    ClientFun =
+        fun() ->
+            {ok, #game_start{
+                tag = Tag, session_pid = SessionPid,
+                token = Token
+            }} = lobby_utils:wait_game_start(),
+            {ok, _} = lobby_utils:wait_peer_turn(SessionPid, 100),
+            ok = game_session:stop_game(SessionPid, Tag),
+            StopResult = lobby_utils:wait_game_stop(Token, 100),
+            TestHost ! {self(), StopResult}
+        end,
+
+    ClientPid = spawn( ClientFun ),
+    {ok, SessionPid} =
+        game_session:start_link(
+            some_token,
+            #peer_id{ client_pid = self(), tag = <<"red">> },
+            #peer_id{ client_pid = ClientPid, tag = <<"blue">>}
+        ),
+    MonitorRef = monitor(process, SessionPid),
+    {ok, #game_start{
+        session_pid = SessionPid
+    }} = lobby_utils:wait_game_start(some_token),
+    ok = game_session:make_turn(SessionPid, <<"red">>, <<"some_turn">>),
+
+    GameStopResult = lobby_utils:wait_game_stop(some_token, 100),
+    SessionDownResult = lobby_utils:wait_process_down(MonitorRef, 100),
+    {ok, PeerStopResult} = lobby_utils:wait_from_pid(ClientPid, 100),
+
+    [
+        ?_assertMatch(
+            {ok, #game_stop{ token = some_token, tag = <<"red">>, session_pid = SessionPid} },
+            GameStopResult
+        ),
+        ?_assertMatch(
+            {ok, #game_stop{tag = <<"blue">>, token = some_token, session_pid = SessionPid}},
+            PeerStopResult
+        ),
+        ?_assertEqual(ok, SessionDownResult)
+    ].
+
+stop_game_out_of_turn_test_() ->
+    TestHost = self(),
+    ClientFun =
+        fun() ->
+            {ok, #game_start{
+                session_pid = SessionPid,
+                token = Token, tag = Tag
+            }} = lobby_utils:wait_game_start(),
+            ok = game_session:stop_game(SessionPid, Tag),
+            StopResult = lobby_utils:wait_game_stop(Token, 100),
+            TestHost ! {self(), StopResult}
+        end,
+
+    ClientPid = spawn( ClientFun ),
+    {ok, SessionPid} =
+        game_session:start_link(
+            some_token,
+            #peer_id{ client_pid = self(), tag = <<"red">> },
+            #peer_id{ client_pid = ClientPid, tag = <<"blue">>}
+        ),
+    MonitorRef = monitor(process, SessionPid),
+    {ok, #game_start{
+        session_pid = SessionPid
+    }} = lobby_utils:wait_game_start(some_token),
+
+    GameStopResult = lobby_utils:wait_game_stop(some_token, 100),
+    SessionDownResult = lobby_utils:wait_process_down(MonitorRef, 100),
+    {ok, PeerStopResult} = lobby_utils:wait_from_pid(ClientPid, 100),
+
+    [
+        ?_assertMatch(
+            {ok, #game_stop{ token = some_token, tag = <<"red">>, session_pid = SessionPid} },
+            GameStopResult
+        ),
+        ?_assertMatch(
+            {ok, #game_stop{tag = <<"blue">>, token = some_token, session_pid = SessionPid}},
+            PeerStopResult
+        ),
+        ?_assertEqual(ok, SessionDownResult)
+    ].
 
 
 after_test() ->

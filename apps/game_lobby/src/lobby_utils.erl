@@ -15,6 +15,7 @@
     wait_game_start/0,
     wait_game_start/1,
     wait_game_start/2,
+    wait_game_stop/2,
     wait_process_down/2,
     wait_peer_lost/2,
     wait_peer_reset/2,
@@ -47,6 +48,14 @@ wait_game_start(Token, Timeout) ->
 wait_game_start(Timeout) ->
     receive
         #game_start{} = Val ->
+            {ok, Val}
+    after Timeout ->
+        {error, timeout}
+    end.
+
+wait_game_stop(Token, Timeout) ->
+    receive
+        #game_stop{ token = Token } = Val ->
             {ok, Val}
     after Timeout ->
         {error, timeout}
