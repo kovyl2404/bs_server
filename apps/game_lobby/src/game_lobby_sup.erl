@@ -26,6 +26,7 @@ start_link() ->
 
 init([]) ->
     {ok, { {one_for_one, 5, 10}, [
-
+        ?CHILD(game_session_sup, supervisor),
+        ?CHILD(lobby_server, worker)
     ]} }.
 

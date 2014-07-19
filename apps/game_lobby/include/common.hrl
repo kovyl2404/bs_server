@@ -13,6 +13,7 @@
 
 -record(
     game_start, {
+        token,
         session_pid,
         tag
     }

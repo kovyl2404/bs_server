@@ -9,7 +9,7 @@
 
 %% API
 -export([
-    start_link/2,
+    start_link/3,
     set_peer/2,
     make_turn/3,
     ack_turn/3
@@ -27,6 +27,7 @@
 
 -record(
     state, {
+        game_token          = erlang:error(required, token),
         reconnect_timers    = [],
         peer_tags           = [],
         peer_queue          = [],
@@ -39,15 +40,15 @@
 %%%===================================================================
 
 
-start_link(FirstPeer, SecondPeer) ->
+start_link(Token, FirstPeer, SecondPeer) ->
     gen_server:start_link(
-        ?MODULE, {FirstPeer, SecondPeer}, []
+        ?MODULE, {Token, FirstPeer, SecondPeer}, []
     ).
 
 set_peer(SessionPid, PeerId) ->
     case (catch gen_server:call(SessionPid, {set_peer, PeerId})) of
         {'EXIT', _} ->
-            {error, expired};
+            {error, session_expired };
         ok ->
             ok
     end.
@@ -64,14 +65,16 @@ ack_turn(SessionPid, PeerTag, Data) ->
 
 
 init({
+    Token,
     #peer_id{client_pid = FirstPid, tag = FirstTag},
     #peer_id{ client_pid = SecondPid, tag = SecondTag}
 }) ->
     erlang:monitor(process, FirstPid),
     erlang:monitor(process, SecondPid),
-    FirstPid ! #game_start{tag = FirstTag, session_pid = self()},
-    SecondPid ! #game_start{ tag = SecondTag, session_pid = self()},
+    FirstPid ! #game_start{tag = FirstTag, session_pid = self(), token = Token},
+    SecondPid ! #game_start{ tag = SecondTag, session_pid = self(), token = Token},
     {ok, #state{
+        game_token = Token,
         peer_tags = orddict:from_list([
             {FirstTag, FirstPid}, {SecondTag, SecondPid}
         ]),
@@ -85,13 +88,14 @@ handle_call(
     #state{
         peer_tags = PeerTags,
         reconnect_timers = ReconnectTimers,
-        cur_turn = CurTurn
+        cur_turn = CurTurn,
+        game_token = Token
     } = State
 ) ->
     erlang:monitor(process, NewPeerPid),
     OldPid = orddict:fetch(Tag, PeerTags),
     OldPid ! #peer_change{session_pid = self()},
-    NewPeerPid ! #game_start{session_pid = self(), tag = Tag},
+    NewPeerPid ! #game_start{session_pid = self(), tag = Tag, token = Token},
     [ P ! #peer_reset{session_pid = self() } || {T, P} <- PeerTags, T =/= Tag],
     ok = consider_repeat_turn(CurTurn, Tag, NewPeerPid),
     {reply, ok, State#state{
