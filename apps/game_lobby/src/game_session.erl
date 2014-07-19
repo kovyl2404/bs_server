@@ -76,8 +76,8 @@ init({
 }) ->
     erlang:monitor(process, FirstPid),
     erlang:monitor(process, SecondPid),
-    FirstPid ! #game_start{tag = FirstTag, session_pid = self(), token = Token},
-    SecondPid ! #game_start{ tag = SecondTag, session_pid = self(), token = Token},
+    FirstPid ! #game_start{tag = FirstTag, session_pid = self(), token = Token, turn = true},
+    SecondPid ! #game_start{ tag = SecondTag, session_pid = self(), token = Token, turn = false},
     {ok, #state{
         game_token = Token,
         peer_tags = orddict:from_list([
@@ -94,13 +94,19 @@ handle_call(
         peer_tags = PeerTags,
         reconnect_timers = ReconnectTimers,
         cur_turn = CurTurn,
-        game_token = Token
+        game_token = Token,
+        peer_queue = PeerQueue
     } = State
 ) ->
+    ThisPeerTurn =
+        case PeerQueue of
+            [{Tag, _}, _] -> true;
+            _ -> false
+        end,
     erlang:monitor(process, NewPeerPid),
     OldPid = orddict:fetch(Tag, PeerTags),
     OldPid ! #peer_change{session_pid = self()},
-    NewPeerPid ! #game_start{session_pid = self(), tag = Tag, token = Token},
+    NewPeerPid ! #game_start{session_pid = self(), tag = Tag, token = Token, turn = ThisPeerTurn},
     [ P ! #peer_reset{session_pid = self() } || {T, P} <- PeerTags, T =/= Tag],
     ok = consider_repeat_turn(CurTurn, Tag, NewPeerPid),
     {reply, ok, State#state{
