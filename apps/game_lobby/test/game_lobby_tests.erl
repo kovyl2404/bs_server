@@ -82,6 +82,71 @@ checkin_test_() ->
         end
     ).
 
+cancel_before_game_started_test_() ->
+    fixture(
+        fun(_) ->
+            {ok, Token} = game_lobby:checkin(self()),
+            {ok, Token} = game_lobby:cancel(self(), Token),
+            GameStop = lobby_utils:wait_game_stop(Token, 100),
+
+            CheckinResult1 = game_lobby:checkin(self()),
+            CheckinResult2 = game_lobby:checkin(self()),
+
+            GameStart1 = lobby_utils:wait_game_start(),
+            GameStart2 = lobby_utils:wait_game_start(),
+            [
+                ?_assertEqual(
+                    {ok, #game_stop{session_pid = undefined, token = Token, tag = undefined}},
+                    GameStop
+                ),
+                ?_assertMatch({ok, _}, CheckinResult1),
+                ?_assertEqual(CheckinResult1, CheckinResult2),
+                ?_assertMatch({ok, _}, GameStart1),
+                ?_assertMatch({ok, _}, GameStart2)
+
+            ]
+        end
+    ).
+
+cancel_after_game_started_test_() ->
+    fixture(
+        fun(_) ->
+            TestHost = self(),
+            ClientFun =
+                fun() ->
+                    {ok, Token} = game_lobby:checkin(self()),
+                    {ok, #game_start{token = Token, session_pid = SessionPid, tag = Tag}}
+                        = lobby_utils:wait_game_start(),
+                    game_lobby:cancel(self(), Token),
+                    GameStopResult = lobby_utils:wait_game_stop(Token, 100),
+                    TestHost ! {self(), GameStopResult}
+                end,
+
+            {ok, Token} = game_lobby:checkin(self()),
+            PeerPid = spawn( ClientFun ),
+
+            {ok, #game_start{tag = Tag, session_pid = SessionPid, token = Token}}
+                = lobby_utils:wait_game_start(),
+            SessionMonitor = monitor(process, SessionPid),
+
+            GameStop = lobby_utils:wait_game_stop(Token, 100),
+            {ok, PeerGameStop} = lobby_utils:wait_from_pid(PeerPid, 100),
+            SessionDown = lobby_utils:wait_process_down(SessionMonitor, 100),
+            [
+                ?_assertEqual(
+                    {ok, #game_stop{token = Token, tag = Tag, session_pid = SessionPid}},
+                    GameStop
+                ),
+                ?_assertMatch(
+                    {ok, #game_stop{token = Token, session_pid = SessionPid}},
+                    PeerGameStop
+                ),
+                ?_assertEqual(ok, SessionDown)
+            ]
+        end
+    ).
+
+
 game_start_after_checkin_test_() ->
     fixture(
         fun(_) ->

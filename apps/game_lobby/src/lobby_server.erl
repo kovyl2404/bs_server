@@ -11,7 +11,8 @@
 -export([
     start_link/0,
     checkin/1,
-    checkin/3
+    checkin/3,
+    cancel/2
 ]).
 
 %% gen_server callbacks
@@ -45,6 +46,9 @@ checkin(ClientPid) ->
 
 checkin(ClientPid, GameToken, PeerTag) ->
     safe_call(?SERVER, {checkin, ClientPid, GameToken, PeerTag}).
+
+cancel(ClientPid, GameToken) ->
+    safe_call(?SERVER, {cancel, ClientPid, GameToken }).
 
 
 safe_call(Server, Request) ->
@@ -122,6 +126,33 @@ handle_call(
         _ ->
             {reply, {error, session_expired }, State}
     end;
+
+handle_call(
+    {cancel, ClientPid, Token},
+    _From,
+    #state{
+        waiting_client = {WaitingClientPid, WaitingClientToken}
+    } = State
+) when ClientPid =:= WaitingClientPid andalso Token =:= WaitingClientToken ->
+    ClientPid ! #game_stop{ token = Token },
+    {reply, {ok, Token}, State#state{waiting_client = undefined }};
+
+handle_call(
+    {cancel, ClientPid, Token},
+    _From,
+    #state{
+
+    } = State
+) ->
+    Reply =
+        case ets:lookup(?SERVER, Token) of
+            [{Token, SessionPid}] ->
+                game_session:stop_game(SessionPid, ClientPid),
+                {ok, Token};
+            _ ->
+                {error, session_expired}
+        end,
+    {reply, Reply, State};
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.

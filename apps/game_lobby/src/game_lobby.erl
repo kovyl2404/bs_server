@@ -7,7 +7,8 @@
 %% Interface functions
 -export([
     checkin/1,
-    checkin/3
+    checkin/3,
+    cancel/2
 ]).
 
 %% Application callbacks
@@ -33,6 +34,8 @@ checkin(ClientPid, SessionToken, SessionTag) ->
     lobby_server:checkin(ClientPid, SessionToken, SessionTag).
 
 
+cancel(ClientPid, Token) ->
+    lobby_server:cancel(ClientPid, Token).
 
 %% ===================================================================
 %% Application callbacks

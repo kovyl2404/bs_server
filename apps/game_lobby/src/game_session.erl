@@ -60,8 +60,9 @@ make_turn(SessionPid, PeerTag, Data) ->
 ack_turn(SessionPid, PeerTag, Data) ->
     gen_server:cast(SessionPid, {ack_turn, PeerTag, Data}).
 
-stop_game(SessionPid, PeerTag) ->
-    gen_server:cast(SessionPid, {stop_game, PeerTag}).
+stop_game(SessionPid, PeerTagOrPid) ->
+    gen_server:cast(SessionPid, {stop_game, PeerTagOrPid}).
+
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -162,9 +163,6 @@ handle_cast(
         game_token = Token
     } = State
 ) ->
-%%     case orddict:find(Tag, PeerTags) of
-%%
-%%     end,
     [ P ! #game_stop{
         session_pid = self(),
         token = Token,
