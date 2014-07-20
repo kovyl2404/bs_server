@@ -25,7 +25,7 @@ start(_StartType, _StartArgs) ->
     {ok, _ListenerPid} =
         ranch:start_listener(
             ?MODULE, ?DEFAULT_ACCEPTORS_COUNT, ranch_tcp, transport_options(),
-            client_protocol, connection_options()
+            client_connection, connection_options()
         ),
     client_session_sup:start_link().
 

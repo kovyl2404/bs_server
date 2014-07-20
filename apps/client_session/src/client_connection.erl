@@ -1,5 +1,5 @@
 
--module(client_protocol).
+-module(client_connection).
 
 -author("Viacheslav V. Kovalev").
 -behaviour(ranch_protocol).

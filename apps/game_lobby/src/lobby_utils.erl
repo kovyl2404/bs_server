@@ -15,8 +15,10 @@
     wait_game_start/0,
     wait_game_start/1,
     wait_game_start/2,
+    wait_game_stop/0,
     wait_game_stop/2,
     wait_process_down/2,
+    wait_process_down_reason/2,
     wait_peer_lost/2,
     wait_peer_reset/2,
     wait_peer_turn/2,
@@ -53,6 +55,12 @@ wait_game_start(Timeout) ->
         {error, timeout}
     end.
 
+wait_game_stop() ->
+    receive
+        #game_stop{} = Val ->
+            {ok, Val}
+    end.
+
 wait_game_stop(Token, Timeout) ->
     receive
         #game_stop{ token = Token } = Val ->
@@ -71,6 +79,14 @@ wait_process_down(MonitorRef, Timeout) ->
     receive
         {'DOWN', MonitorRef, process, _, _} ->
             ok
+    after Timeout ->
+        {error, timeout}
+    end.
+
+wait_process_down_reason(MonitorRef, Timeout) ->
+    receive
+        {'DOWN', MonitorRef, process, _, Reason} ->
+            {ok, Reason}
     after Timeout ->
         {error, timeout}
     end.

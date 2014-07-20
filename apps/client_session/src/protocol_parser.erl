@@ -7,7 +7,8 @@
 
 -export([
     init/0,
-    feed/2
+    feed/2,
+    parse/1
 ]).
 
 
@@ -26,6 +27,10 @@
 
 init() ->
     #read_command{}.
+
+parse(Data) ->
+    {ok, _, Messages} = feed(init(), Data),
+    Messages.
 
 
 feed(

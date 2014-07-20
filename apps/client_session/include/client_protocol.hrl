@@ -3,8 +3,12 @@
 
 -author("Viacheslav V. Kovalev").
 
--define(BID_GAME_TAG, 63).
--define(CANCEL_BID_GAME_TAG, 64).
+-define(START_GAME_TAG, 63).
+-define(START_GAME_PACKET(Data), <<?START_GAME_TAG, 0,0, Data>>).
+-define(START_GAME_PACKET, <<?START_GAME_TAG, 0,0, _>>).
+
+-define(CANCEL_GAME_TAG, 64).
+-define(CANCEL_GAME_PACKET, <<?CANCEL_GAME_TAG, 0, 0, 0>>).
 
 -define(PING_TAG, 111).
 -define(SERVER_TAG, 222).
