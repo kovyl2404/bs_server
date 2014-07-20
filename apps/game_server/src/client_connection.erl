@@ -29,7 +29,8 @@
         cur_seq_id,
         their_seq_id,
         max_allowed_pings,
-        ping_interval
+        ping_interval,
+        session_pid
     }
 ).
 
@@ -43,6 +44,8 @@ init({Ref, Socket, Transport, ProtocolOptions}) ->
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [{active, true}]),
     MaxAllowedPings = proplists:get_value(max_pings_allowed, ProtocolOptions),
+    {ok, SessionPid} = supervisor:start_child( client_session_sup,  [Socket, Transport] ),
+    monitor(process, SessionPid),
     erlang:send(self(), send_ping),
     gen_server:enter_loop(
         ?MODULE, [],
@@ -53,7 +56,8 @@ init({Ref, Socket, Transport, ProtocolOptions}) ->
             cur_seq_id = 0,
             their_seq_id = 0,
             max_allowed_pings = MaxAllowedPings,
-            ping_interval = trunc(1000*proplists:get_value(ping_interval_sec, ProtocolOptions))
+            ping_interval = trunc(1000*proplists:get_value(ping_interval_sec, ProtocolOptions)),
+            session_pid = SessionPid
         },
         ?TIMEOUT
     ).
@@ -78,19 +82,18 @@ handle_info(
 handle_info(
     send_ping,
     #state{
-        transport = Transport,
-        socket = Socket,
         cur_seq_id = CurSeqId,
         ping_interval = PingInterval,
         their_seq_id = TheirSeqId,
-        max_allowed_pings = MaxAllowedPings
+        max_allowed_pings = MaxAllowedPings,
+        session_pid = SessionPid
     } = State
 ) ->
     case CurSeqId - TheirSeqId of
         Diff when Diff >= MaxAllowedPings ->
             {stop, pings_lost, State};
         _ ->
-            Transport:send(Socket, ?PING_PACKET(CurSeqId)),
+            client_session:send_ping(SessionPid, CurSeqId),
             erlang:send_after(PingInterval, self(), send_ping),
             {noreply, State#state{
                 cur_seq_id = CurSeqId+1
@@ -124,13 +127,29 @@ handle_info(
 ) ->
     {stop, normal, State};
 
+handle_info(
+    {'DOWN', _, process, SessionPid, _},
+    #state{
+        session_pid = SessionPid
+    } = State
+) ->
+    {stop, normal, State#state{session_pid = undefined}};
+
 handle_info(_Message, State) ->
     {stop, unexpected_info, State}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-terminate(_Reason, #state{ socket = Socket, transport = Transport }) ->
+terminate(
+    _Reason,
+    #state{
+        socket = Socket,
+        transport = Transport,
+        session_pid = SessionPid
+    }
+) ->
+    SessionPid =/= undefined andalso client_session:stop(SessionPid),
     ok = Transport:close(Socket),
     ok.
 

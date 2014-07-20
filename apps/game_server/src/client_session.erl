@@ -8,12 +8,17 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([
-    send_command/2
+    start/2,
+    start_link/2,
+    stop/1
 ]).
 
 -export([
-    start/2,
-    start_link/2,
+    send_command/2,
+    send_ping/2
+]).
+
+-export([
     init/1,
     handle_call/3,
     handle_cast/2,
@@ -44,9 +49,6 @@
     }
 ).
 
-send_command(SessionPid, Command) ->
-    gen_server:cast(SessionPid, Command).
-
 start_link(Socket, Transport) ->
     gen_server:start_link(
         ?MODULE, {Socket, Transport}, []
@@ -56,6 +58,16 @@ start(Socket, Transport) ->
     gen_server:start(
         ?MODULE, {Socket, Transport}, []
     ).
+
+
+send_command(SessionPid, Command) ->
+    gen_server:cast(SessionPid, Command).
+
+send_ping(SessionPid, SeqId) ->
+    gen_server:cast(SessionPid, {send_ping, SeqId}).
+
+stop(SessionPid) ->
+    gen_server:cast(SessionPid, stop).
 
 
 init({Socket, Transport}) ->
@@ -71,6 +83,49 @@ handle_call(
     {stop, unexpected_call, unexpected_call, State}.
 
 
+handle_cast(
+    stop,
+    #in_game_state{
+        session_pid = undefined,
+        is_reconnect = IsReconnect,
+        token = Token
+    } = State
+) ->
+    not IsReconnect andalso game_lobby:cancel(Token),
+    {stop, normal, State};
+
+handle_cast(
+    stop, State
+) ->
+    {stop, normal, State};
+
+handle_cast(
+    {send_ping, SeqId},
+    #in_game_state{
+        transport = Transport,
+        socket = Socket
+    } = State
+) ->
+    case send_ping(Socket, Transport, SeqId) of
+        ok ->
+            {noreply, State};
+        _ ->
+            {stop, normal, State}
+    end;
+
+handle_cast(
+    {send_ping, SeqId},
+    #idle_state{
+        transport = Transport,
+        socket = Socket
+    } = State
+) ->
+    case send_ping(Socket, Transport, SeqId) of
+        ok ->
+            {noreply, State};
+        _ ->
+            {stop, normal, State}
+    end;
 
 handle_cast(
     {command, ?START_GAME_PACKET(0)},
@@ -86,6 +141,10 @@ handle_cast(
         transport = Transport
     }};
 
+
+%% ?START_GAME_PACKET(1) stand for reconnect to formerly started game.
+%% After this message client must send data-packet with payload,
+%% that indicates which game reconnect to.
 handle_cast(
     {command, ?START_GAME_PACKET(1)},
     #idle_state{
@@ -99,6 +158,9 @@ handle_cast(
         transport = Transport
     }};
 
+
+%% Packet, indicates which session client wants to reconnect.
+%% In this case, previous message only was ?START_GAME_PACKET(1)
 handle_cast(
     {data, Data},
     #in_game_state{
@@ -158,12 +220,15 @@ handle_cast(
 ) ->
     {stop, not_in_game, State};
 
+
+%% After client decided to surrender, it send ?SURRENDER_PACKET.
+%% This packet treats as typical turn, but after it client only
+%% expects that game will be stopped by beer.
 handle_cast(
     {command, ?SURRENDER_PACKET = _TurnData},
     #in_game_state{
         is_ours_turn = true,
         session_pid = SessionPid,
-        tag = Tag,
         waiting_surrender_ack = true,
         token = Token
     } = State
@@ -306,3 +371,7 @@ terminate(_, _State) ->
 
 code_change(_, State, _) ->
     {ok, State}.
+
+
+send_ping(Socket, Transport, SeqId) ->
+    Transport:send(Socket, ?PING_PACKET(SeqId)).
