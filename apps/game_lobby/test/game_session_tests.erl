@@ -292,7 +292,7 @@ stop_game_in_turn_test_() ->
             }} = lobby_utils:wait_game_start(),
             {ok, #peer_turn{data = Data}} = lobby_utils:wait_peer_turn(SessionPid, 100),
             ok = game_session:ack_turn(SessionPid, Tag, Data),
-            ok = game_session:stop_game(SessionPid, Tag),
+            ok = game_session:stop_game(SessionPid),
             StopResult = lobby_utils:wait_game_stop(Token, 100),
             TestHost ! {self(), StopResult}
         end,
@@ -335,7 +335,7 @@ stop_game_no_turn_ack_test_() ->
                 token = Token
             }} = lobby_utils:wait_game_start(),
             {ok, _} = lobby_utils:wait_peer_turn(SessionPid, 100),
-            ok = game_session:stop_game(SessionPid, Tag),
+            ok = game_session:stop_game(SessionPid),
             StopResult = lobby_utils:wait_game_stop(Token, 100),
             TestHost ! {self(), StopResult}
         end,
@@ -375,9 +375,9 @@ stop_game_out_of_turn_test_() ->
         fun() ->
             {ok, #game_start{
                 session_pid = SessionPid,
-                token = Token, tag = Tag
+                token = Token, tag = _Tag
             }} = lobby_utils:wait_game_start(),
-            ok = game_session:stop_game(SessionPid, Tag),
+            ok = game_session:stop_game(SessionPid),
             StopResult = lobby_utils:wait_game_stop(Token, 100),
             TestHost ! {self(), StopResult}
         end,

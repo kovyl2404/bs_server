@@ -13,7 +13,7 @@
     set_peer/2,
     make_turn/3,
     ack_turn/3,
-    stop_game/2
+    stop_game/1
 ]).
 
 %% gen_server callbacks
@@ -60,8 +60,8 @@ make_turn(SessionPid, PeerTag, Data) ->
 ack_turn(SessionPid, PeerTag, Data) ->
     gen_server:cast(SessionPid, {ack_turn, PeerTag, Data}).
 
-stop_game(SessionPid, PeerTagOrPid) ->
-    gen_server:cast(SessionPid, {stop_game, PeerTagOrPid}).
+stop_game(SessionPid) ->
+    gen_server:cast(SessionPid, stop_game).
 
 
 %%%===================================================================
@@ -157,7 +157,7 @@ handle_cast(
     }};
 
 handle_cast(
-    {stop_game, _Tag},
+    stop_game,
     #state{
         peer_tags = PeerTags,
         game_token = Token

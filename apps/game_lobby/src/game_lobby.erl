@@ -8,7 +8,7 @@
 -export([
     checkin/1,
     checkin/3,
-    cancel/2
+    cancel/1
 ]).
 
 %% Application callbacks
@@ -34,8 +34,8 @@ checkin(ClientPid, SessionToken, SessionTag) ->
     lobby_server:checkin(ClientPid, SessionToken, SessionTag).
 
 
-cancel(ClientPid, Token) ->
-    lobby_server:cancel(ClientPid, Token).
+cancel(Token) ->
+    lobby_server:cancel(Token).
 
 %% ===================================================================
 %% Application callbacks
