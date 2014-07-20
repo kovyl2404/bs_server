@@ -7,8 +7,12 @@
 -define(START_GAME_PACKET(Data), <<?START_GAME_TAG, 0,0, Data>>).
 -define(START_GAME_PACKET, <<?START_GAME_TAG, 0,0, _>>).
 
--define(CANCEL_GAME_TAG, 64).
+-define(CANCEL_GAME_TAG, 129).
 -define(CANCEL_GAME_PACKET, <<?CANCEL_GAME_TAG, 0, 0, 0>>).
+
+-define(SURRENDER_TAG, 123).
+-define(SURRENDER_PACKET, <<?SURRENDER_TAG, _, _, _>>).
+-define(SURRENDER_PACKET(A, B, C), <<?SURRENDER_TAG, A, B, C>>).
 
 -define(PING_TAG, 111).
 -define(SERVER_TAG, 222).

@@ -39,7 +39,8 @@
         tag  = undefined,
         is_ours_turn = false,
         game_stopping = false,
-        is_reconnect = false
+        is_reconnect = false,
+        waiting_surrender_ack = false
     }
 ).
 
@@ -158,6 +159,22 @@ handle_cast(
     {stop, not_in_game, State};
 
 handle_cast(
+    {command, ?SURRENDER_PACKET = _TurnData},
+    #in_game_state{
+        is_ours_turn = true,
+        session_pid = SessionPid,
+        tag = Tag,
+        waiting_surrender_ack = true,
+        token = Token
+    } = State
+) when SessionPid =/= undefined ->
+    %% TODO: Update wins count in profile
+    {ok, _} = game_lobby:cancel(Token),
+    {noreply, State#in_game_state{
+        game_stopping = true
+    }};
+
+handle_cast(
     {command, TurnData},
     #in_game_state{
         is_ours_turn = true,
@@ -239,6 +256,26 @@ handle_info(
 handle_info(
     #peer_turn{
         session_pid = SessionPid,
+        data = ?SURRENDER_PACKET = Data
+    },
+    #in_game_state{
+        session_pid = SessionPid,
+        socket = Socket,
+        transport = Transport,
+        tag = PeerTag
+    } = State
+) when PeerTag =/= undefined ->
+    case Transport:send(Socket, Data) of
+        ok ->
+            ok = game_session:ack_turn(SessionPid, PeerTag, Data),
+            {noreply, State#in_game_state{is_ours_turn = true, waiting_surrender_ack = true}};
+        _Another ->
+            {stop, normal, State}
+    end;
+
+handle_info(
+    #peer_turn{
+        session_pid = SessionPid,
         data = Data
     },
     #in_game_state{
@@ -247,7 +284,7 @@ handle_info(
         transport = Transport,
         tag = PeerTag
     } = State
-) when SessionPid =/= undefined, PeerTag =/= undefined ->
+) when PeerTag =/= undefined ->
     case Transport:send(Socket, Data) of
         ok ->
             ok = game_session:ack_turn(SessionPid, PeerTag, Data),
