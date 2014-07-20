@@ -1,4 +1,4 @@
-{application, client_session,
+{application, game_server,
  [
   {description, "Accepts and manages client connections"},
   {vsn, "0.0.1"},
@@ -8,7 +8,7 @@
         stdlib,
         ranch
   ]},
-  {mod, { client_session, []}},
+  {mod, { game_server, []}},
   {env, [
       {max_pings_allowed, 5},
       {ping_interval_sec, 1}

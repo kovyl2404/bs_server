@@ -3,7 +3,7 @@
 -author("Viacheslav V. Kovalev").
 
 
--include_lib("client_session/include/client_protocol.hrl").
+-include_lib("game_server/include/client_protocol.hrl").
 
 -export([
     init/0,

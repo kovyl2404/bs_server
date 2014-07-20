@@ -2,7 +2,7 @@
 -module(protocol_parser_tests).
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("client_session/include/client_protocol.hrl").
+-include_lib("game_server/include/client_protocol.hrl").
 
 feed_command_at_once_test_() ->
     Parser = protocol_parser:init(),

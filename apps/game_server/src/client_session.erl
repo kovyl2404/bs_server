@@ -1,8 +1,8 @@
--module(client_session_proc).
+-module(client_session).
 
 -behaviour(gen_server).
 
--include_lib("client_session/include/client_protocol.hrl").
+-include_lib("game_server/include/client_protocol.hrl").
 -include_lib("game_lobby/include/common.hrl").
 
 -include_lib("eunit/include/eunit.hrl").

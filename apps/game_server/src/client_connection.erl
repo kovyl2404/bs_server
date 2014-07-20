@@ -6,7 +6,7 @@
 -behaviour(gen_server).
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("client_session/include/client_protocol.hrl").
+-include_lib("game_server/include/client_protocol.hrl").
 
 -define(TIMEOUT, 5000).
 

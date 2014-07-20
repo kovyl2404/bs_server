@@ -3,7 +3,7 @@
 -author("Viacheslav V. Kovalev").
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("client_session/include/client_protocol.hrl").
+-include_lib("game_server/include/client_protocol.hrl").
 
 
 fixture(Inst) ->
@@ -16,15 +16,15 @@ fixture(Inst) ->
 setup() ->
     %ok = error_logger:tty(false),
     ok = application:start(ranch),
-    ok = application:load(client_session),
-    ok = application:set_env(client_session, port, 7891),
-    ok = application:set_env(client_session, max_pings_allowed, 5),
-    ok = application:set_env(client_session, ping_interval_sec, 1),
-    ok = application:start(client_session).
+    ok = application:load(game_server),
+    ok = application:set_env(game_server, port, 7891),
+    ok = application:set_env(game_server, max_pings_allowed, 5),
+    ok = application:set_env(game_server, ping_interval_sec, 1),
+    ok = application:start(game_server).
 
 cleanup(_) ->
-    ok = application:stop(client_session),
-    ok = application:unload(client_session),
+    ok = application:stop(game_server),
+    ok = application:unload(game_server),
     ok = application:stop(ranch).
 
 before_test() ->

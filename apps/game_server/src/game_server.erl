@@ -1,10 +1,10 @@
--module(client_session).
+-module(game_server).
 
 -author("Viacheslav V. Kovalev").
 
 -behaviour(application).
 
--define(CLIENT_SESSION_DEPS, [gproc, ranch]).
+-define(CLIENT_SESSION_DEPS, [ranch]).
 -define(DEFAULT_ACCEPTORS_COUNT, 100).
 
 %% Application callbacks
@@ -27,7 +27,7 @@ start(_StartType, _StartArgs) ->
             ?MODULE, ?DEFAULT_ACCEPTORS_COUNT, ranch_tcp, transport_options(),
             client_connection, connection_options()
         ),
-    client_session_sup:start_link().
+    game_server_sup:start_link().
 
 stop(_State) ->
     ok.

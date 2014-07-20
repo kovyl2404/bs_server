@@ -1,4 +1,4 @@
--module(client_session_sup).
+-module(game_server_sup).
 
 -author("Viacheslav V. Kovalev").
 
