@@ -3,6 +3,7 @@
 -author("Viacheslav V. Kovalev").
 
 -include_lib("game_lobby/include/common.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 %% Helpers
 -export([
@@ -19,7 +20,9 @@
     wait_game_stop/2,
     wait_process_down/2,
     wait_process_down_reason/2,
+    wait_peer_lost/1,
     wait_peer_lost/2,
+    wait_peer_reset/1,
     wait_peer_reset/2,
     wait_peer_turn/2,
     wait_peer_turn_fail/2,
@@ -58,7 +61,7 @@ wait_game_start(Timeout) ->
 wait_game_stop() ->
     receive
         #game_stop{} = Val ->
-            {ok, Val}
+            Val
     end.
 
 wait_game_stop(Token, Timeout) ->
@@ -99,12 +102,24 @@ wait_peer_lost(SessionPid, Timeout) ->
         {error, timeout}
     end.
 
+wait_peer_lost(SessionPid) ->
+    receive
+        #peer_lost{session_pid = SessionPid} = PeerLost->
+            PeerLost
+    end.
+
 wait_peer_reset(SessionPid, Timeout) ->
     receive
         #peer_reset{session_pid = SessionPid} = Val ->
             {ok, Val}
     after Timeout ->
         {error, timeout}
+    end.
+
+wait_peer_reset(SessionPid) ->
+    receive
+        #peer_reset{session_pid = SessionPid} = Val ->
+            Val
     end.
 
 wait_peer_turn(SessionPid, Timeout) ->

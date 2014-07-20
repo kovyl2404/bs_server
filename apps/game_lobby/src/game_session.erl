@@ -13,7 +13,7 @@
     set_peer/2,
     make_turn/3,
     ack_turn/3,
-    stop_game/2
+    stop_game/1
 ]).
 
 %% gen_server callbacks
@@ -50,8 +50,8 @@ set_peer(SessionPid, PeerId) ->
     case (catch gen_server:call(SessionPid, {set_peer, PeerId})) of
         {'EXIT', _} ->
             {error, session_expired };
-        ok ->
-            ok
+        Other ->
+            Other
     end.
 
 make_turn(SessionPid, PeerTag, Data) ->
@@ -60,8 +60,8 @@ make_turn(SessionPid, PeerTag, Data) ->
 ack_turn(SessionPid, PeerTag, Data) ->
     gen_server:cast(SessionPid, {ack_turn, PeerTag, Data}).
 
-stop_game(SessionPid, PeerTagOrPid) ->
-    gen_server:cast(SessionPid, {stop_game, PeerTagOrPid}).
+stop_game(SessionPid) ->
+    gen_server:cast(SessionPid, stop_game).
 
 
 %%%===================================================================
@@ -104,15 +104,20 @@ handle_call(
             _ -> false
         end,
     erlang:monitor(process, NewPeerPid),
-    OldPid = orddict:fetch(Tag, PeerTags),
-    OldPid ! #peer_change{session_pid = self()},
-    NewPeerPid ! #game_start{session_pid = self(), tag = Tag, token = Token, turn = ThisPeerTurn},
-    [ P ! #peer_reset{session_pid = self() } || {T, P} <- PeerTags, T =/= Tag],
-    ok = consider_repeat_turn(CurTurn, Tag, NewPeerPid),
-    {reply, ok, State#state{
-        peer_tags = orddict:store( Tag, NewPeerPid, PeerTags ),
-        reconnect_timers = orddict:erase(Tag, ReconnectTimers)
-    }}.
+    case orddict:find(Tag, PeerTags) of
+        {ok, OldPid} ->
+            OldPid ! #peer_change{session_pid = self()},
+            NewPeerPid ! #game_start{session_pid = self(), tag = Tag, token = Token, turn = ThisPeerTurn},
+            [ P ! #peer_reset{session_pid = self() } || {T, P} <- PeerTags, T =/= Tag],
+            ok = consider_repeat_turn(CurTurn, Tag, NewPeerPid),
+            {reply, ok, State#state{
+                peer_tags = orddict:store( Tag, NewPeerPid, PeerTags ),
+                reconnect_timers = orddict:erase(Tag, ReconnectTimers)
+            }};
+        _ ->
+            {reply, {error, invalid_tag}, State}
+    end.
+
 
 
 handle_cast(
@@ -163,7 +168,7 @@ handle_cast(
     }};
 
 handle_cast(
-    {stop_game, _Tag},
+    stop_game,
     #state{
         peer_tags = PeerTags,
         game_token = Token
@@ -186,13 +191,17 @@ handle_info(
         reconnect_timers = ReconnectTimers
     } = State
 ) ->
-    {Tag, Pid} = lists:keyfind(Pid, 2, PeerTags),
-    [ P ! #peer_lost{session_pid = self()} || {T, P} <- PeerTags, T =/= Tag],
-    TimerId = make_ref(),
-    erlang:send_after(2000, self(), {reconnect_timeout, Tag, TimerId}),
-    {noreply, State#state{
-        reconnect_timers = orddict:store(Tag, TimerId, ReconnectTimers)
-    }};
+    case lists:keyfind(Pid, 2, PeerTags) of
+        {Tag, Pid} ->
+            [ P ! #peer_lost{session_pid = self()} || {T, P} <- PeerTags, T =/= Tag],
+            TimerId = make_ref(),
+            erlang:send_after(2000, self(), {reconnect_timeout, Tag, TimerId}),
+            {noreply, State#state{
+                reconnect_timers = orddict:store(Tag, TimerId, ReconnectTimers)
+            }};
+        _ ->
+            {noreply, State}
+    end;
 
 handle_info(
     {reconnect_timeout, Tag, TimerId},

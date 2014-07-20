@@ -86,7 +86,7 @@ cancel_before_game_started_test_() ->
     fixture(
         fun(_) ->
             {ok, Token} = game_lobby:checkin(self()),
-            {ok, Token} = game_lobby:cancel(self(), Token),
+            {ok, Token} = game_lobby:cancel(Token),
             GameStop = lobby_utils:wait_game_stop(Token, 100),
 
             CheckinResult1 = game_lobby:checkin(self()),
@@ -117,7 +117,7 @@ cancel_after_game_started_test_() ->
                     {ok, Token} = game_lobby:checkin(self()),
                     {ok, #game_start{token = Token, session_pid = SessionPid, tag = Tag}}
                         = lobby_utils:wait_game_start(),
-                    game_lobby:cancel(self(), Token),
+                    game_lobby:cancel(Token),
                     GameStopResult = lobby_utils:wait_game_stop(Token, 100),
                     TestHost ! {self(), GameStopResult}
                 end,
