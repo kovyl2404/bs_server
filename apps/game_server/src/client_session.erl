@@ -1,6 +1,6 @@
 -module(client_session).
 
--behaviour(gen_server).
+-behaviour(gen_fsm).
 
 -include_lib("game_server/include/client_protocol.hrl").
 -include_lib("game_lobby/include/common.hrl").
@@ -20,412 +20,318 @@
 
 -export([
     init/1,
-    handle_call/3,
-    handle_cast/2,
-    handle_info/2,
-    terminate/2,
-    code_change/3
+    idle/2,
+    waiting_for_game/2,
+    running_game/2,
+    stopping_game/2,
+    handle_event/3,
+    handle_sync_event/4,
+    handle_info/3,
+    terminate/3,
+    code_change/4
 ]).
 
--record(
-    idle_state, {
-        socket      = erlang:error(required, socket),
-        transport   = erlang:error(required, transport)
-    }
-).
-
-
--record(
-    in_game_state, {
-        socket = erlang:error(required, socket),
-        transport = erlang:error(required, transport),
-        token = erlang:error(required, token),
-        session_pid = undefined,
-        tag  = undefined,
-        is_ours_turn = false,
-        game_stopping = false,
-        is_reconnect = false,
-        waiting_surrender_ack = false,
-        is_surrending = false
-    }
-).
-
-start_link(Socket, Transport) ->
-    gen_server:start_link(
-        ?MODULE, {Socket, Transport}, []
-    ).
 
 start(Socket, Transport) ->
-    gen_server:start(
-        ?MODULE, {Socket, Transport}, []
-    ).
+    gen_fsm:start(?MODULE, {Socket, Transport}, []).
 
+start_link(Socket, Transport) ->
+    gen_fsm:start_link(?MODULE, {Socket, Transport}, []).
 
-send_command(SessionPid, Command) ->
-    gen_server:cast(SessionPid, Command).
+stop(Session) ->
+    gen_fsm:send_all_state_event(Session, stop).
 
-send_ping(SessionPid, SeqId) ->
-    gen_server:cast(SessionPid, {send_ping, SeqId}).
+send_command(Session, Command) ->
+    gen_fsm:send_event(Session, Command).
 
-stop(SessionPid) ->
-    gen_server:cast(SessionPid, stop).
+send_ping(Session, SeqId) ->
+    gen_fsm:send_all_state_event(Session, {ping, SeqId}).
 
+-record(
+    state, {
+        socket               = eralng:error(required, socket),
+        transport            = eralng:error(required, transport),
+        game_token           = undefined,
+        client_tag           = undefined,
+        game_session         = undefined,
+        is_ours_turn         = false,
+        is_surrender_claimed = false
+    }
+).
 
 init({Socket, Transport}) ->
-    {ok, #idle_state{
+    {ok, idle, #state{
         socket = Socket,
         transport = Transport
     }}.
 
 
-handle_call(
-    _, _, State
-) ->
-    {stop, unexpected_call, unexpected_call, State}.
-
-
-handle_cast(
-    stop,
-    #in_game_state{
-        session_pid = undefined,
-        is_reconnect = IsReconnect,
-        token = Token
-    } = State
-) ->
-    not IsReconnect andalso game_lobby:cancel(Token),
-    {stop, normal, State};
-
-handle_cast(
-    stop, State
-) ->
-    {stop, normal, State};
-
-handle_cast(
-    {send_ping, SeqId},
-    #in_game_state{
+handle_event(
+    {ping, SeqId}, StateName,
+    #state{
         transport = Transport,
         socket = Socket
     } = State
 ) ->
-    case send_ping(Socket, Transport, SeqId) of
+    case Transport:send(Socket, [?PING_PACKET(SeqId)]) of
         ok ->
-            {noreply, State};
+            {next_state, StateName, State};
         _ ->
             {stop, normal, State}
     end;
 
-handle_cast(
-    {send_ping, SeqId},
-    #idle_state{
-        transport = Transport,
-        socket = Socket
+handle_event(
+    stop, _StateName, State
+) ->
+    {stop, normal, State}.
+
+handle_sync_event(_, _, _StateName, State) ->
+    {stop, unexpected_sync_event, State}.
+
+idle(
+    {command, ?START_GAME_PACKET(?NEW_GAME_FLAG)},
+    #state{
+
     } = State
 ) ->
-    case send_ping(Socket, Transport, SeqId) of
-        ok ->
-            {noreply, State};
-        _ ->
-            {stop, normal, State}
-    end;
+    {ok, GameToken} = game_lobby:checkin(self()),
+    {next_state, waiting_for_game, State#state{ game_token = GameToken }};
 
-handle_cast(
-    {command, ?START_GAME_PACKET(0)},
-    #idle_state{
-        socket = Socket,
-        transport = Transport
-    }
+idle(
+    {command, ?START_GAME_PACKET(?RECONNECT_GAME_FLAG)},
+    State
 ) ->
-    {ok, Token} = game_lobby:checkin(self()),
-    {noreply, #in_game_state{
-        token = Token,
-        socket = Socket,
-        transport = Transport
-    }};
+    {next_state, waiting_for_game, State#state{ game_token = reconnecting }};
+
+idle( {command, _}, State ) ->
+    {stop, protocol_violation, State}.
 
 
-%% ?START_GAME_PACKET(1) stand for reconnect to formerly started game.
-%% After this message client must send data-packet with payload,
-%% that indicates which game reconnect to.
-handle_cast(
-    {command, ?START_GAME_PACKET(1)},
-    #idle_state{
-        socket = Socket,
-        transport = Transport
-    }
-) ->
-    {noreply, #in_game_state{
-        token = undefined,
-        socket = Socket,
-        transport = Transport
-    }};
+waiting_for_game(
+    {command, ?CANCEL_GAME_PACKET},
+    #state{
+        game_token = Token
+    } = State
+) when Token =/= reconnecting ->
+    {ok, _} = game_lobby:cancel(Token),
+    {next_state, waiting_for_game, State};
 
-
-%% Packet, indicates which session client wants to reconnect.
-%% In this case, previous message only was ?START_GAME_PACKET(1)
-handle_cast(
-    {data, Data},
-    #in_game_state{
-        token = undefined,
-        session_pid = undefined,
-        game_stopping = false,
-        tag = undefined,
+waiting_for_game(
+    {data, ReconnectionData},
+    #state{
+        game_token = reconnecting,
         socket = Socket,
         transport = Transport
     } = State
 ) ->
-    {Token, Tag} = binary_to_term(Data),
-    case game_lobby:checkin(self(), Token, Tag) of
-        {error, invalid_tag} ->
-            {stop, invalid_tag, State};
-        {error, session_expired} ->
-            StartFrame = session_utils:make_server_frame( term_to_binary({Token, Tag})),
-            Response = [
-                ?START_GAME_PACKET(0), StartFrame, ?CANCEL_GAME_PACKET
-            ],
-            case Transport:send(Socket, Response) of
-                ok ->
-                    {noreply, #idle_state{ socket = Socket, transport = Transport}};
+    case (catch binary_to_term(ReconnectionData)) of
+        {ClientTag, ClientToken} ->
+            case game_lobby:checkin(self(), ClientTag, ClientToken) of
+                {ok, Token} ->
+                    {next_state, waiting_for_game, State#state{ game_token = Token}};
+                {error, session_expired} ->
+                    SendFrame = [
+                        ?START_GAME_PACKET(0),
+                        session_utils:make_server_frame(ReconnectionData),
+                        ?CANCEL_GAME_PACKET
+                    ],
+                    case Transport:send(Socket, SendFrame) of
+                        ok ->
+                            {next_state, idle, #state{socket = Socket, transport = Transport}};
+                        _ ->
+                            {stop, normal, State}
+                    end;
                 _ ->
-                    {stop, normal, State}
+                    {stop, reconnection_token_corrupted, State}
             end;
-        {ok, Token} ->
-            {noreply, State#in_game_state{ token = Token, is_reconnect = true }}
+        _ ->
+            {stop, reconnection_token_corrupted, State}
     end;
 
-handle_cast(
-    {command, ?START_GAME_PACKET},
-    #in_game_state{} = State
-) ->
-    {stop, already_in_game, State};
 
-handle_cast(
+waiting_for_game(
+    _, #state{} = State
+) ->
+    {stop, protocol_violation, State}.
+
+
+running_game(
     {command, ?CANCEL_GAME_PACKET},
-    #in_game_state{
-        token = Token
+    #state{
+        game_token = Token
     } = State
 ) ->
-    game_lobby:cancel(Token),
-        %% Doesnt matter, either this call succeeded, or not.
-        %% Process have to receive #game_stop{} anyway, 'cause
-        %% checkin and cancel are serialized through single process 'lobby_server'
-
-    {noreply, State#in_game_state{game_stopping = true}};
-
-
-
-handle_cast(
-    {command, ?CANCEL_GAME_PACKET},
-    #idle_state{
-
-    } = State
-) ->
-    {stop, not_in_game, State};
-
-
-%% After client decided to surrender, it send ?SURRENDER_PACKET.
-%% This packet treats as typical turn, but after it client only
-%% expects that game will be stopped by beer.
-handle_cast(
-    {command, ?SURRENDER_PACKET = _TurnData},
-    #in_game_state{
-        is_ours_turn = true,
-        session_pid = SessionPid,
-        waiting_surrender_ack = true,
-        token = Token
-    } = State
-) when SessionPid =/= undefined ->
-    %% TODO: Update wins count in profile
     {ok, _} = game_lobby:cancel(Token),
-    {noreply, State#in_game_state{
-        game_stopping = true
-    }};
+    {next_state, stopping_game, State};
 
-handle_cast(
-    {command, ?SURRENDER_PACKET = TurnData},
-    #in_game_state{
+
+running_game(
+    {command, ?SURRENDER_PACKET = Surrender},
+    #state{
+        game_session = GameSession,
+        client_tag = ClientTag,
         is_ours_turn = true,
-        session_pid = SessionPid,
-        tag = Tag,
-        waiting_surrender_ack = false
+        is_surrender_claimed = IsSurrenderClaimed
     } = State
-) when SessionPid =/= undefined ->
-    ok = game_session:make_turn(SessionPid, Tag, TurnData),
-    {noreply, State#in_game_state{is_surrending = true}};
+) ->
+    ok = game_session:surrender(GameSession, ClientTag, Surrender),
+    IsSurrenderClaimed andalso update_profile_wins(),
+    {next_state, stopping_game, State};
 
-handle_cast(
-    {command, TurnData},
-    #in_game_state{
-        is_ours_turn = true,
-        session_pid = SessionPid,
-        tag = Tag,
-        waiting_surrender_ack = false
-    } = State
-) when SessionPid =/= undefined ->
-    ok = game_session:make_turn(SessionPid, Tag, TurnData),
-    {noreply, State};
-
-handle_cast(
+running_game(
     {command, _TurnData},
-    #in_game_state{
+    #state{
+        game_session = GameSession,
+        client_tag = ClientTag,
         is_ours_turn = true,
-        session_pid = SessionPid,
-        token = Token,
-        waiting_surrender_ack = true
+        is_surrender_claimed = true
     } = State
-) when SessionPid =/= undefined ->
-    {ok, _} = game_lobby:cancel(Token),
+) ->
+    ok = game_session:surrender(GameSession, ClientTag, ?SURRENDER_PACKET(0,0,0)),
     {stop, protocol_violation, State};
 
-handle_cast(
+running_game(
+    {command, TurnData},
+    #state{
+        game_session = GameSession,
+        client_tag = ClientTag,
+        is_ours_turn = true,
+        is_surrender_claimed = false
+    } = State
+) ->
+    ok = game_session:make_turn(GameSession, ClientTag, TurnData),
+    {next_state, running_game, State#state{ is_ours_turn = false }};
+
+running_game(
     {command, _},
-    State
+    #state{
+        game_session = _,
+        client_tag = _,
+        is_ours_turn = false
+    } = State
 ) ->
-    {stop, protocol_violation, State};
+    {stop, protocol_violation, State}.
 
-handle_cast(
-    _,
-    State
+stopping_game(
+    {command, _},
+    #state{} = State
 ) ->
-    {stop, unexpected_cast, State}.
+    {stop, protocol_violation, State}.
+
+
 
 handle_info(
     #game_start{
-        session_pid = SessionPid,
-        tag = Tag,
+        session_pid = GameSession,
+        tag = ClientTag,
         token = Token,
-        turn = Turn,
-        is_last_turn = IsLastTurn
+        turn = Turn
     },
-    #in_game_state{
-        token = ActualToken,
-        socket = Socket,
+    waiting_for_game,
+    #state{
         transport = Transport,
-        is_reconnect = IsReconnect
+        socket = Socket
     } = State
-) when ActualToken =:= Token ->
-    TurnFlag = case Turn of true -> 1; false -> 0 end,
-    StartFrame = session_utils:make_server_frame( term_to_binary({Token, Tag})),
-    case Transport:send(Socket, [ ?START_GAME_PACKET(TurnFlag), StartFrame ]) of
+) ->
+    TurnFlag = turn_flag(Turn),
+    SendFrame = [
+        ?START_GAME_PACKET(TurnFlag),
+        session_utils:make_server_frame(term_to_binary({Token, ClientTag}))
+    ],
+    case Transport:send(Socket, SendFrame) of
         ok ->
-            {noreply, State#in_game_state{
-                tag = Tag,
-                session_pid = SessionPid,
-                is_ours_turn = Turn,
-                game_stopping = true,
-                waiting_surrender_ack = IsLastTurn
+            {next_state, running_game, State#state{
+                game_session = GameSession,
+                client_tag = ClientTag,
+                is_ours_turn = Turn
             }};
-        {error, _Reason} ->
-            not IsReconnect andalso
-                game_lobby:cancel(Token),
+        _ ->
+            {ok, _} = game_lobby:cancel(Token),
             {stop, normal, State}
     end;
 
 handle_info(
     #game_stop{
-        token = Token,
-        session_pid = SessionPid,
-        tag = Tag
+        token = _Token
     },
-    #in_game_state{
+    StateName,
+    #state{
         socket = Socket,
-        transport = Transport,
-        token = Token,
-        session_pid = SessionPid,
-        tag = Tag,
-        game_stopping = true
+        transport = Transport
     } = State
-) ->
-    case Transport:send(Socket, [?CANCEL_GAME_PACKET]) of
+) when StateName =:= waiting_for_game; StateName =:= stopping_game; StateName =:= running_game ->
+    case Transport:send(Socket, ?CANCEL_GAME_PACKET) of
         ok ->
-            {noreply, #idle_state{socket = Socket, transport = Transport}};
-        {error, _Reason} ->
-            {stop, normal, State}
-    end;
-
-handle_info(
-    #peer_lost{
-
-    },
-    #in_game_state{
-
-    } = State
-) ->
-    {noreply, State};
-
-handle_info(
-    #peer_reset{
-
-    },
-    #in_game_state{
-
-    } = State
-) ->
-    {noreply, State};
-
-handle_info(
-    #peer_turn{},
-    #in_game_state{
-        is_surrending = true,
-        token = Token
-    } = State
-) ->
-    {ok, _} = game_lobby:cancel(Token),
-    {noreply, State};
-
-handle_info(
-    #peer_turn{
-        session_pid = SessionPid,
-        data = ?SURRENDER_PACKET = Data
-    },
-    #in_game_state{
-        session_pid = SessionPid,
-        socket = Socket,
-        transport = Transport,
-        tag = PeerTag
-    } = State
-) when PeerTag =/= undefined ->
-    case Transport:send(Socket, Data) of
-        ok ->
-            ok = game_session:ack_turn(SessionPid, PeerTag, Data, true),
-            {noreply, State#in_game_state{is_ours_turn = true, waiting_surrender_ack = true}};
-        _Another ->
+            {next_state, idle, #state{socket = Socket, transport = Transport}};
+        _ ->
             {stop, normal, State}
     end;
 
 handle_info(
     #peer_turn{
-        session_pid = SessionPid,
-        data = Data
+        data = TurnData
     },
-    #in_game_state{
-        session_pid = SessionPid,
-        socket = Socket,
+    running_game,
+    #state{
+        is_ours_turn = false,
         transport = Transport,
-        tag = PeerTag
+        socket = Socket
     } = State
-) when PeerTag =/= undefined ->
-    case Transport:send(Socket, Data) of
+) ->
+    case Transport:send(Socket, TurnData) of
         ok ->
-            ok = game_session:ack_turn(SessionPid, PeerTag, Data),
-            {noreply, State#in_game_state{is_ours_turn = true}};
-        _Another ->
+            {next_state, running_game, State#state{is_ours_turn = true}};
+        _ ->
             {stop, normal, State}
     end;
 
 
+handle_info( #peer_turn{}, running_game, State ) ->
+    {stop, internal_violation, State};
+
+handle_info(
+    #peer_surrender{ data = SurrenderData }, running_game,
+    #state{
+        is_ours_turn = false,
+        socket = Socket,
+        transport = Transport
+    } = State
+) ->
+    case Transport:send(Socket, SurrenderData) of
+        ok ->
+            {next_state, running_game, State#state{is_surrender_claimed = true, is_ours_turn = true}};
+        _ ->
+            {stop, normal, State}
+    end;
+
+handle_info( #peer_surrender{}, running_game, State ) ->
+    {next_state, internal_violation, State};
 
 
 handle_info(
-    _, State
+    #peer_lost{ },
+    running_game,
+    #state{} = State
 ) ->
-    {stop, unexpected_message, State}.
+    {next_state, running_game, State};
 
-terminate(_, _State) ->
+handle_info(
+    #peer_reset{ },
+    running_game,
+    #state{} = State
+) ->
+    {next_state, running_game, State}.
+
+
+code_change(_OldVsn, StateName, StateData, _Extra) ->
+    {ok, StateName, StateData}.
+
+terminate(_, _StateName, _State) ->
     ok.
 
-code_change(_, State, _) ->
-    {ok, State}.
 
+turn_flag(true) -> 1;
+turn_flag(false) -> 0.
 
-send_ping(Socket, Transport, SeqId) ->
-    Transport:send(Socket, ?PING_PACKET(SeqId)).
+update_profile_wins() ->
+    ok.

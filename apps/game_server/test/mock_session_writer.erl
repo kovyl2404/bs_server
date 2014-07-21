@@ -4,11 +4,8 @@
 
 %% API
 -export([
-    send/2,
-    close/1
+    send/2
 ]).
 
 send(_, _) ->
     erlang:error(not_mocked, send).
-close(_) ->
-    ok.

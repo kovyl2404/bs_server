@@ -7,6 +7,9 @@
 -define(START_GAME_PACKET(Data), <<?START_GAME_TAG, 0,0, Data>>).
 -define(START_GAME_PACKET, <<?START_GAME_TAG, 0,0, _>>).
 
+-define(NEW_GAME_FLAG, 0).
+-define(RECONNECT_GAME_FLAG, 1).
+
 -define(CANCEL_GAME_TAG, 129).
 -define(CANCEL_GAME_PACKET, <<?CANCEL_GAME_TAG, 0, 0, 0>>).
 
