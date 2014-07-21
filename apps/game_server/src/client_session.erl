@@ -244,15 +244,35 @@ handle_cast(
     #in_game_state{
         is_ours_turn = true,
         session_pid = SessionPid,
-        tag = Tag
+        tag = Tag,
+        waiting_surrender_ack = false
     } = State
 ) when SessionPid =/= undefined ->
     ok = game_session:make_turn(SessionPid, Tag, TurnData),
     {noreply, State};
 
 handle_cast(
+    {command, _TurnData},
+    #in_game_state{
+        is_ours_turn = true,
+        session_pid = SessionPid,
+        token = Token,
+        waiting_surrender_ack = true
+    } = State
+) when SessionPid =/= undefined ->
+    {ok, _} = game_lobby:cancel(Token),
+    {stop, protocol_violation, State};
+
+
+handle_cast(
     {command, _},
-    #in_game_state{} = State
+    State
+) ->
+    {stop, protocol_violation, State};
+
+handle_cast(
+    _,
+    State
 ) ->
     {stop, unexpected_cast, State}.
 

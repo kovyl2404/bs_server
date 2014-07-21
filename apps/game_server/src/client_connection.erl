@@ -168,4 +168,12 @@ handle_message(
     } = State
 ) ->
     TheirSeqId = ?PING_SEQ_ID(PingPacket),
-    State#state{ their_seq_id = TheirSeqId }.
+    State#state{ their_seq_id = TheirSeqId };
+handle_message(
+    Command,
+    #state{
+        session_pid = SessionPid
+    } = State
+) ->
+    ok = client_session:send_command(SessionPid, Command),
+    State.

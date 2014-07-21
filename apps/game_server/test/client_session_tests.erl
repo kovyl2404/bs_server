@@ -745,6 +745,42 @@ peer_surrender_test_() ->
         end
     ).
 
+turn_instead_of_surrender_ack_test_() ->
+    fixture(
+        fun(_) ->
+            TestHost = self(),
+            ClientFun =
+                fun() ->
+                    {ok, _} = game_lobby:checkin(self()),
+                    {ok, #game_start{turn = true, session_pid = SessionPid, tag = Tag}} = lobby_utils:wait_game_start(),
+                    ok = game_session:make_turn(SessionPid, Tag, ?SURRENDER_PACKET(0, 0, 0)),
+                    GameStopResult = lobby_utils:wait_game_stop(),
+                    TestHost ! {self(), GameStopResult}
+                end,
+            LocalClientPid = spawn( ClientFun ),
+
+            ok = meck:expect(
+                mock_session_writer, send,
+                fun(_, Data) ->
+                    TestHost ! {self(), protocol_parser:parse(iolist_to_binary(Data))},
+                    ok
+                end
+            ),
+            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+            RemoteClientRef = monitor(process, RemoteClientPid),
+            ok = client_session:send_command(RemoteClientPid, {command, ?START_GAME_PACKET(0)}),
+            {ok, [{command, _}, {data, _}]} = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+
+            ok = client_session:send_command(RemoteClientPid, {command, <<1,2,3,4>>}),
+            LocalPeerGameStopResult = lobby_utils:wait_from_pid(LocalClientPid, 100),
+            RemotePeerDownResult = lobby_utils:wait_process_down_reason(RemoteClientRef, 100),
+            [
+                ?_assertMatch({ok, #game_stop{}}, LocalPeerGameStopResult),
+                ?_assertMatch({ok, protocol_violation}, RemotePeerDownResult)
+            ]
+        end
+    ).
+
 after_test() ->
     error_logger:tty(true).
 
