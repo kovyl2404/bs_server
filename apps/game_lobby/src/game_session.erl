@@ -110,13 +110,13 @@ handle_call(
         {ok, OldPid} ->
             send_safe(OldPid, #peer_change{session_pid = self()}),
             [ send_safe(P, #peer_reset{session_pid = self() }) || {T, P} <- PeerTags, T =/= Tag],
-            ThisPeerTurn andalso consider_repeat_turn(LastTurn, NewPeerPid),
             NewPeerPid ! #game_start{
                 session_pid = self(),
                 tag = Tag,
                 token = Token,
                 turn = (LastTurn == undefined andalso ThisPeerTurn)
             },
+            ThisPeerTurn andalso consider_repeat_turn(LastTurn, NewPeerPid),
             {reply, ok, State#state{
                 peer_tags = orddict:store( Tag, NewPeerPid, PeerTags ),
                 reconnect_timers = orddict:erase(Tag, ReconnectTimers)

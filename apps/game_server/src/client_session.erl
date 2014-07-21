@@ -320,7 +320,13 @@ handle_info(
     running_game,
     #state{} = State
 ) ->
-    {next_state, running_game, State}.
+    {next_state, running_game, State};
+
+handle_info(
+    _, _,
+    #state{} = State
+) ->
+    {stop, internal_violation, State}.
 
 
 code_change(_OldVsn, StateName, StateData, _Extra) ->

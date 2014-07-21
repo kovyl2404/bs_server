@@ -4,7 +4,7 @@
 
 -behaviour(application).
 
--define(CLIENT_SESSION_DEPS, [ranch]).
+-define(CLIENT_SESSION_DEPS, [ranch, game_lobby]).
 -define(DEFAULT_ACCEPTORS_COUNT, 100).
 
 %% Application callbacks
@@ -19,7 +19,7 @@
 
 start() ->
     ok = start_deps(),
-    ok = application:start(client_session).
+    ok = application:start(game_server).
 
 start(_StartType, _StartArgs) ->
     {ok, _ListenerPid} =

@@ -490,7 +490,7 @@ peer_surrender_and_reconnects_test_() ->
     GameStart = lobby_utils:wait_game_start(100),
     NoTurnRepeatForBlue = lobby_utils:wait_peer_surrender( SessionPid, 100),
 
-    ok = game_session:surrender(SessionPid, <<"red">>),
+    ok = game_session:surrender(SessionPid, <<"red">>, <<"surrender_data">>),
     GameStop1 = lobby_utils:wait_game_stop(Token, 1000),
     GameStop2 = lobby_utils:wait_game_stop(Token, 1000),
     [
