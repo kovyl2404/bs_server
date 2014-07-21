@@ -45,7 +45,8 @@
         is_ours_turn = false,
         game_stopping = false,
         is_reconnect = false,
-        waiting_surrender_ack = false
+        waiting_surrender_ack = false,
+        is_surrending = false
     }
 ).
 
@@ -240,6 +241,18 @@ handle_cast(
     }};
 
 handle_cast(
+    {command, ?SURRENDER_PACKET = TurnData},
+    #in_game_state{
+        is_ours_turn = true,
+        session_pid = SessionPid,
+        tag = Tag,
+        waiting_surrender_ack = false
+    } = State
+) when SessionPid =/= undefined ->
+    ok = game_session:make_turn(SessionPid, Tag, TurnData),
+    {noreply, State#in_game_state{is_surrending = true}};
+
+handle_cast(
     {command, TurnData},
     #in_game_state{
         is_ours_turn = true,
@@ -263,7 +276,6 @@ handle_cast(
     {ok, _} = game_lobby:cancel(Token),
     {stop, protocol_violation, State};
 
-
 handle_cast(
     {command, _},
     State
@@ -281,7 +293,8 @@ handle_info(
         session_pid = SessionPid,
         tag = Tag,
         token = Token,
-        turn = Turn
+        turn = Turn,
+        is_last_turn = IsLastTurn
     },
     #in_game_state{
         token = ActualToken,
@@ -298,7 +311,8 @@ handle_info(
                 tag = Tag,
                 session_pid = SessionPid,
                 is_ours_turn = Turn,
-                game_stopping = true
+                game_stopping = true,
+                waiting_surrender_ack = IsLastTurn
             }};
         {error, _Reason} ->
             not IsReconnect andalso
@@ -339,6 +353,16 @@ handle_info(
     {noreply, State};
 
 handle_info(
+    #peer_turn{},
+    #in_game_state{
+        is_surrending = true,
+        token = Token
+    } = State
+) ->
+    {ok, _} = game_lobby:cancel(Token),
+    {noreply, State};
+
+handle_info(
     #peer_turn{
         session_pid = SessionPid,
         data = ?SURRENDER_PACKET = Data
@@ -352,7 +376,7 @@ handle_info(
 ) when PeerTag =/= undefined ->
     case Transport:send(Socket, Data) of
         ok ->
-            ok = game_session:ack_turn(SessionPid, PeerTag, Data),
+            ok = game_session:ack_turn(SessionPid, PeerTag, Data, true),
             {noreply, State#in_game_state{is_ours_turn = true, waiting_surrender_ack = true}};
         _Another ->
             {stop, normal, State}

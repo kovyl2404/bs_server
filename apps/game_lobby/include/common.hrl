@@ -16,7 +16,8 @@
         token,
         session_pid,
         tag,
-        turn
+        turn,
+        is_last_turn
     }
 ).
 

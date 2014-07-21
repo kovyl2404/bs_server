@@ -158,40 +158,5 @@ wait_ping(Socket, Timeout) ->
         {error, timeout}
     end.
 
-%% start_game_test_() ->
-%%     StartGameFrame = <<63, 0, 0, 0>>,
-%%     fixture(
-%%         fun(_) ->
-%%             {ok, FirstClient} = gen_tcp:connect("localhost", 7890, [{active, true}]),
-%%             ok = gen_tcp:send(FirstClient, StartGameFrame),
-%%
-%%             {ok, SecondClient} = gen_tcp:connect("localhost", 7890, [{active, true}]),
-%%             ok = gen_tcp:send(SecondClient, StartGameFrame),
-%%
-%%             FirstClientReceived =
-%%                 receive
-%%                     {tcp, FirstClient, Data1} ->
-%%                         {ok, Data1}
-%%                 after 100 ->
-%%                     {error, timeout}
-%%                 end,
-%%
-%%             SecondClientReceived =
-%%                 receive
-%%                     {tcp, SecondClient, Data2} ->
-%%                         {ok, Data2}
-%%                 after 100 ->
-%%                     {error, timeout}
-%%                 end,
-%%
-%%             [
-%%                 {"Message has correct tag", ?_assertMatch({ok, <<?BID_GAME_TAG, _, _, _>>}, FirstClientReceived)},
-%%                 {"Both client received same message", ?_assertEqual(FirstClientReceived, SecondClientReceived)}
-%%
-%%             ]
-%%
-%%         end
-%%     ).
-
 after_test() ->
     error_logger:tty(false).

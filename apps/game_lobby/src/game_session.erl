@@ -13,6 +13,7 @@
     set_peer/2,
     make_turn/3,
     ack_turn/3,
+    ack_turn/4,
     stop_game/1
 ]).
 
@@ -32,7 +33,8 @@
         reconnect_timers    = [],
         peer_tags           = [],
         peer_queue          = [],
-        cur_turn            = undefined
+        cur_turn            = undefined,
+        is_last_turn
     }
 ).
 
@@ -58,7 +60,10 @@ make_turn(SessionPid, PeerTag, Data) ->
     gen_server:cast(SessionPid, {turn, PeerTag, Data}).
 
 ack_turn(SessionPid, PeerTag, Data) ->
-    gen_server:cast(SessionPid, {ack_turn, PeerTag, Data}).
+    gen_server:cast(SessionPid, {ack_turn, PeerTag, Data, false}).
+
+ack_turn(SessionPid, PeerTag, Data, IsLastTurn) ->
+    gen_server:cast(SessionPid, {ack_turn, PeerTag, Data, IsLastTurn}).
 
 stop_game(SessionPid) ->
     gen_server:cast(SessionPid, stop_game).
@@ -76,14 +81,15 @@ init({
 }) ->
     erlang:monitor(process, FirstPid),
     erlang:monitor(process, SecondPid),
-    FirstPid ! #game_start{tag = FirstTag, session_pid = self(), token = Token, turn = true},
-    SecondPid ! #game_start{ tag = SecondTag, session_pid = self(), token = Token, turn = false},
+    FirstPid ! #game_start{tag = FirstTag, session_pid = self(), token = Token, turn = true, is_last_turn = false},
+    SecondPid ! #game_start{ tag = SecondTag, session_pid = self(), token = Token, turn = false, is_last_turn = false},
     {ok, #state{
         game_token = Token,
         peer_tags = orddict:from_list([
             {FirstTag, FirstPid}, {SecondTag, SecondPid}
         ]),
-        peer_queue = [ FirstTag, SecondTag ]
+        peer_queue = [ FirstTag, SecondTag ],
+        is_last_turn = false
     }}.
 
 
@@ -95,19 +101,26 @@ handle_call(
         reconnect_timers = ReconnectTimers,
         cur_turn = CurTurn,
         game_token = Token,
-        peer_queue = PeerQueue
+        peer_queue = PeerQueue,
+        is_last_turn = IsLastTurn
     } = State
 ) ->
     ThisPeerTurn =
         case PeerQueue of
-            [{Tag, _}, _] -> true;
+            [Tag, _] -> true;
             _ -> false
         end,
     erlang:monitor(process, NewPeerPid),
     case orddict:find(Tag, PeerTags) of
         {ok, OldPid} ->
             OldPid ! #peer_change{session_pid = self()},
-            NewPeerPid ! #game_start{session_pid = self(), tag = Tag, token = Token, turn = ThisPeerTurn},
+            NewPeerPid ! #game_start{
+                session_pid = self(),
+                tag = Tag,
+                token = Token,
+                turn = ThisPeerTurn,
+                is_last_turn = IsLastTurn
+            },
             [ P ! #peer_reset{session_pid = self() } || {T, P} <- PeerTags, T =/= Tag],
             ok = consider_repeat_turn(CurTurn, Tag, NewPeerPid),
             {reply, ok, State#state{
@@ -121,7 +134,7 @@ handle_call(
 
 
 handle_cast(
-    {ack_turn, PeerTag, Data},
+    {ack_turn, PeerTag, Data, IsLastTurn},
     #state{
         peer_queue = [ CurrentPeerTag, NextPeerTag ],
         cur_turn = CurTurn
@@ -129,10 +142,11 @@ handle_cast(
 ) when CurTurn =:= {PeerTag, Data} ->
     {noreply, State#state{
         peer_queue = [NextPeerTag, CurrentPeerTag],
-        cur_turn = undefined
+        cur_turn = undefined,
+        is_last_turn = IsLastTurn
     }};
 
-handle_cast( {ack, _, _}, State ) ->
+handle_cast( {ack, _, _, _}, State ) ->
     {noreply, State};
 
 handle_cast(

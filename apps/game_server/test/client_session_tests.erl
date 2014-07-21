@@ -743,7 +743,7 @@ peer_surrender_test_() ->
                 ?_assertEqual({ok, [{command, ?CANCEL_GAME_PACKET}]}, RemotePeerGameStopResult)
             ]
         end
-    ).
+     ).
 
 turn_instead_of_surrender_ack_test_() ->
     fixture(
@@ -770,13 +770,100 @@ turn_instead_of_surrender_ack_test_() ->
             RemoteClientRef = monitor(process, RemoteClientPid),
             ok = client_session:send_command(RemoteClientPid, {command, ?START_GAME_PACKET(0)}),
             {ok, [{command, _}, {data, _}]} = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-
+            {ok, [{command, <<123, 0, 0, 0>>}]} = lobby_utils:wait_from_pid(RemoteClientPid, 100),
             ok = client_session:send_command(RemoteClientPid, {command, <<1,2,3,4>>}),
             LocalPeerGameStopResult = lobby_utils:wait_from_pid(LocalClientPid, 100),
             RemotePeerDownResult = lobby_utils:wait_process_down_reason(RemoteClientRef, 100),
             [
                 ?_assertMatch({ok, #game_stop{}}, LocalPeerGameStopResult),
                 ?_assertMatch({ok, protocol_violation}, RemotePeerDownResult)
+            ]
+        end
+    ).
+
+reconnect_on_surrender_ack_test_() ->
+    fixture(
+        fun(_) ->
+            TestHost = self(),
+
+            ok = meck:expect(
+                mock_session_writer, send,
+                fun(_, Data) ->
+                    TestHost ! {self(), protocol_parser:parse(iolist_to_binary(Data))},
+                    ok
+                end
+            ),
+
+            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+            ok = client_session:send_command(RemoteClientPid, {command, ?START_GAME_PACKET(0)}),
+            RemoteClientRef = monitor(process, RemoteClientPid),
+            timer:sleep(100),
+            {ok, Token} = game_lobby:checkin(self()),
+            {ok, [{command, ?START_GAME_PACKET(1)}, {data, _}]} = lobby_utils:wait_from_pid(RemoteClientPid, 1000),
+            {ok, #game_start{token = Token, session_pid = Session, turn = false, tag = Tag}} = lobby_utils:wait_game_start(),
+
+            ok = client_session:send_command(RemoteClientPid, {command, ?SURRENDER_PACKET(0,0,0)}),
+            {ok, #peer_turn{data = ?SURRENDER_PACKET(0,0,0)}} = lobby_utils:wait_peer_turn(Session, 100),
+            ok = game_session:ack_turn(Session, Tag, ?SURRENDER_PACKET(0,0,0), true),
+            ok = game_session:make_turn(Session, Tag,?SURRENDER_PACKET(0,0,0)),
+
+            LocalGameStop = lobby_utils:wait_game_stop(Token, 100),
+            RemoteGameStop = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+            RemoteClientDown = lobby_utils:wait_process_down(RemoteClientRef, 100),
+
+            [
+                ?_assertMatch({ok, #game_stop{}}, LocalGameStop),
+                ?_assertMatch({ok, [{command, ?CANCEL_GAME_PACKET}]}, RemoteGameStop),
+                ?_assertEqual({error, timeout}, RemoteClientDown)
+            ]
+        end
+    ).
+
+remote_peer_reconnect_on_surrender_ack_test_() ->
+    fixture(
+        fun(_) ->
+            TestHost = self(),
+            {ok, Token} = game_lobby:checkin(self()),
+
+            ok = meck:expect(
+                mock_session_writer, send,
+                fun(_, Data) ->
+                    TestHost ! {self(), protocol_parser:parse(iolist_to_binary(Data))},
+                    ok
+                end
+            ),
+
+            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+            ok = client_session:send_command(RemoteClientPid, {command, ?START_GAME_PACKET(0)}),
+            RemoteClientRef = monitor(process, RemoteClientPid),
+            timer:sleep(100),
+
+            {ok, [{command, ?START_GAME_PACKET(0)}, {data, ReconnectData}]} = lobby_utils:wait_from_pid(RemoteClientPid, 1000),
+            {ok, #game_start{token = Token, session_pid = Session, turn = true, tag = Tag}} = lobby_utils:wait_game_start(),
+            ok = game_session:make_turn(Session, Tag, ?SURRENDER_PACKET(0,0,0)),
+            {ok, [{command, <<123, 0, 0, 0>>}]} = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+            ok = client_session:stop(RemoteClientPid),
+            ok = lobby_utils:wait_process_down(RemoteClientRef, 100),
+
+            {ok, NewRemoteClientPid} = client_session:start(mock, mock_session_writer),
+            NewRemoteClientRef = monitor(process, NewRemoteClientPid),
+            ok = client_session:send_command(NewRemoteClientPid, {command, ?START_GAME_PACKET(1)}),
+            ok = client_session:send_command(NewRemoteClientPid, {data, ReconnectData}),
+
+            {ok, [{command, ?START_GAME_PACKET(1)}, {data, ReconnectData}]} = lobby_utils:wait_from_pid(NewRemoteClientPid, 1000),
+
+            ok = client_session:send_command(NewRemoteClientPid, {command, ?SURRENDER_PACKET(0,0,0)}),
+
+            #peer_lost{} = lobby_utils:wait_peer_lost(Session),
+            #peer_reset{} = lobby_utils:wait_peer_reset(Session),
+            LocalGameStopResult = lobby_utils:wait_game_stop(Token, 100),
+            RemoteGameStopResult = lobby_utils:wait_from_pid(NewRemoteClientPid, 100),
+            RemoteSessionDownResult = lobby_utils:wait_process_down_reason(NewRemoteClientRef, 100),
+
+            [
+                ?_assertMatch({ok, #game_stop{}}, LocalGameStopResult),
+                ?_assertEqual({ok, [{command, ?CANCEL_GAME_PACKET}]}, RemoteGameStopResult),
+                ?_assertEqual({error, timeout}, RemoteSessionDownResult)
             ]
         end
     ).
