@@ -353,6 +353,16 @@ handle_info(
     {noreply, State};
 
 handle_info(
+    #peer_reset{
+
+    },
+    #in_game_state{
+
+    } = State
+) ->
+    {noreply, State};
+
+handle_info(
     #peer_turn{},
     #in_game_state{
         is_surrending = true,

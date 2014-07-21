@@ -16,8 +16,7 @@
         token,
         session_pid,
         tag,
-        turn,
-        is_last_turn
+        turn
     }
 ).
 
@@ -49,6 +48,13 @@
 
 -record(
     peer_turn, {
+        session_pid,
+        data
+    }
+).
+
+-record(
+    peer_surrender, {
         session_pid,
         data
     }

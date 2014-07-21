@@ -14,6 +14,7 @@
     stop_game/1,
     surrender/1,
     make_turn/2,
+    reconnect_game/2,
     set_owner/2
 ]).
 
@@ -61,6 +62,9 @@ make_turn(ClientEmulator, TurnData) ->
 set_owner(ClientEmulator, Pid) ->
     gen_server:call(ClientEmulator, {set_owner, Pid}).
 
+reconnect_game(ClientEmulator, Data) ->
+    gen_server:cast(ClientEmulator, {reconnect, Data}).
+
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -90,6 +94,15 @@ handle_cast(
     } = State
 ) ->
     ok = gen_tcp:send(Socket, [?START_GAME_PACKET(0)]),
+    {noreply, State};
+
+handle_cast(
+    {reconnect, Data},
+    #state{
+        socket = Socket
+    } = State
+) ->
+    ok = gen_tcp:send(Socket, [?START_GAME_PACKET(1), session_utils:make_server_frame(Data)]),
     {noreply, State};
 
 handle_cast(
@@ -123,7 +136,7 @@ handle_cast(
 handle_cast(
     stop, State
 ) ->
-    {noreply, State};
+    {stop, normal, State};
 
 handle_cast(_Request, State) ->
     {noreply, State}.
@@ -208,7 +221,8 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{socket = Socket} = _State) ->
+    ok = gen_tcp:close(Socket),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

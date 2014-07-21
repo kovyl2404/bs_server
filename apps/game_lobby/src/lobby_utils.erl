@@ -26,7 +26,9 @@
     wait_peer_reset/2,
     wait_peer_turn/2,
     wait_peer_turn_fail/2,
-    wait_peer_change/2
+    wait_peer_change/2,
+    wait_peer_surrender/1,
+    wait_peer_surrender/2
 ]).
 
 random_token() ->
@@ -145,4 +147,18 @@ wait_peer_change(SessionPid, Timeout) ->
             {ok, Val}
     after Timeout ->
         {error, Timeout}
+    end.
+
+wait_peer_surrender(SessionPid) ->
+    receive
+        #peer_surrender{session_pid = SessionPid} = Val ->
+            {ok, Val}
+    end.
+
+wait_peer_surrender(SessionPid, Timeout) ->
+    receive
+        #peer_surrender{session_pid = SessionPid} = Val ->
+            {ok, Val}
+    after Timeout ->
+        {error, timeout}
     end.

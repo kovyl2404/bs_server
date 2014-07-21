@@ -12,8 +12,7 @@
     start_link/3,
     set_peer/2,
     make_turn/3,
-    ack_turn/3,
-    ack_turn/4,
+    surrender/3,
     stop_game/1
 ]).
 
@@ -29,12 +28,12 @@
 
 -record(
     state, {
-        game_token          = erlang:error(required, token),
-        reconnect_timers    = [],
-        peer_tags           = [],
-        peer_queue          = [],
-        cur_turn            = undefined,
-        is_last_turn
+        game_token               = erlang:error(required, token),
+        reconnect_timers         = [],
+        peer_tags                = [],
+        peer_queue               = [],
+        last_turn                = undefined,
+        is_surrender_negotiation = false
     }
 ).
 
@@ -59,11 +58,8 @@ set_peer(SessionPid, PeerId) ->
 make_turn(SessionPid, PeerTag, Data) ->
     gen_server:cast(SessionPid, {turn, PeerTag, Data}).
 
-ack_turn(SessionPid, PeerTag, Data) ->
-    gen_server:cast(SessionPid, {ack_turn, PeerTag, Data, false}).
-
-ack_turn(SessionPid, PeerTag, Data, IsLastTurn) ->
-    gen_server:cast(SessionPid, {ack_turn, PeerTag, Data, IsLastTurn}).
+surrender(SessionPid, PeerTag, SurrenderData) ->
+    gen_server:cast(SessionPid, {surrender, PeerTag, SurrenderData}).
 
 stop_game(SessionPid) ->
     gen_server:cast(SessionPid, stop_game).
@@ -81,15 +77,15 @@ init({
 }) ->
     erlang:monitor(process, FirstPid),
     erlang:monitor(process, SecondPid),
-    FirstPid ! #game_start{tag = FirstTag, session_pid = self(), token = Token, turn = true, is_last_turn = false},
-    SecondPid ! #game_start{ tag = SecondTag, session_pid = self(), token = Token, turn = false, is_last_turn = false},
+    FirstPid ! #game_start{tag = FirstTag, session_pid = self(), token = Token, turn = true },
+    SecondPid ! #game_start{ tag = SecondTag, session_pid = self(), token = Token, turn = false },
     {ok, #state{
         game_token = Token,
         peer_tags = orddict:from_list([
             {FirstTag, FirstPid}, {SecondTag, SecondPid}
         ]),
         peer_queue = [ FirstTag, SecondTag ],
-        is_last_turn = false
+        last_turn = undefined
     }}.
 
 
@@ -99,10 +95,9 @@ handle_call(
     #state{
         peer_tags = PeerTags,
         reconnect_timers = ReconnectTimers,
-        cur_turn = CurTurn,
+        last_turn = LastTurn,
         game_token = Token,
-        peer_queue = PeerQueue,
-        is_last_turn = IsLastTurn
+        peer_queue = PeerQueue
     } = State
 ) ->
     ThisPeerTurn =
@@ -113,16 +108,15 @@ handle_call(
     erlang:monitor(process, NewPeerPid),
     case orddict:find(Tag, PeerTags) of
         {ok, OldPid} ->
-            OldPid ! #peer_change{session_pid = self()},
+            send_safe(OldPid, #peer_change{session_pid = self()}),
+            [ send_safe(P, #peer_reset{session_pid = self() }) || {T, P} <- PeerTags, T =/= Tag],
+            ThisPeerTurn andalso consider_repeat_turn(LastTurn, NewPeerPid),
             NewPeerPid ! #game_start{
                 session_pid = self(),
                 tag = Tag,
                 token = Token,
-                turn = ThisPeerTurn,
-                is_last_turn = IsLastTurn
+                turn = (LastTurn == undefined andalso ThisPeerTurn)
             },
-            [ P ! #peer_reset{session_pid = self() } || {T, P} <- PeerTags, T =/= Tag],
-            ok = consider_repeat_turn(CurTurn, Tag, NewPeerPid),
             {reply, ok, State#state{
                 peer_tags = orddict:store( Tag, NewPeerPid, PeerTags ),
                 reconnect_timers = orddict:erase(Tag, ReconnectTimers)
@@ -134,51 +128,100 @@ handle_call(
 
 
 handle_cast(
-    {ack_turn, PeerTag, Data, IsLastTurn},
-    #state{
-        peer_queue = [ CurrentPeerTag, NextPeerTag ],
-        cur_turn = CurTurn
-    } = State
-) when CurTurn =:= {PeerTag, Data} ->
-    {noreply, State#state{
-        peer_queue = [NextPeerTag, CurrentPeerTag],
-        cur_turn = undefined,
-        is_last_turn = IsLastTurn
-    }};
-
-handle_cast( {ack, _, _, _}, State ) ->
-    {noreply, State};
-
-handle_cast(
     {turn, CurrentPeerTag, Data},
     #state{
         peer_queue = [ CurrentPeerTag, NextPeerTag ],
-        peer_tags = PeerTags
+        peer_tags = PeerTags,
+        is_surrender_negotiation = false
     } = State
 ) ->
     NextPeerPid = orddict:fetch(NextPeerTag, PeerTags),
-    NextPeerPid ! #peer_turn{session_pid = self(), data = Data},
+    TurnValue = #peer_turn{session_pid = self(), data = Data},
+    send_safe(NextPeerPid, TurnValue),
     {noreply, State#state{
-        cur_turn = {NextPeerTag, Data}
+        last_turn = TurnValue,
+        peer_queue = [ NextPeerTag, CurrentPeerTag ]
     }};
 
 handle_cast(
-    {turn, CurrentPeerTag, _Data},
+    {turn, FailedPeerTag, _Data},
+    #state{
+        peer_tags = PeerTags,
+        peer_queue = [ ActualPeerTag, FailedPeerTag ],
+        reconnect_timers = ReconnectTimers,
+        is_surrender_negotiation = false
+    } = State
+) when FailedPeerTag =:= FailedPeerTag->
+    TimerId = handle_turn_violation(ActualPeerTag, FailedPeerTag, PeerTags),
+    {noreply, State#state{
+        reconnect_timers = orddict:store(FailedPeerTag, TimerId, ReconnectTimers),
+        peer_tags = orddict:store(FailedPeerTag, undefined, PeerTags)
+    }};
+
+handle_cast(
+    {turn, FailedPeerTag, _Data},
+    #state{
+        peer_tags = PeerTags,
+        reconnect_timers = ReconnectTimers,
+        is_surrender_negotiation = true,
+        peer_queue = PeerQueue
+    } = State
+) ->
+    ActualPeerTag =
+        case PeerQueue of
+            [FailedPeerTag, AnotherTag] -> AnotherTag;
+            [AnotherTag, FailedPeerTag] -> AnotherTag
+        end,
+    TimerId = handle_turn_violation(ActualPeerTag, FailedPeerTag, PeerTags),
+    {noreply, State#state{
+        reconnect_timers = orddict:store(FailedPeerTag, TimerId, ReconnectTimers),
+        peer_tags = orddict:store(FailedPeerTag, undefined, PeerTags)
+    }};
+
+
+%% Peer claims about its loss
+handle_cast(
+    {surrender, CurrentPeerTag, SurrenderData},
+    #state{
+        peer_queue = [ CurrentPeerTag, NextPeerTag ],
+        peer_tags = PeerTags,
+        is_surrender_negotiation = false
+    } = State
+) ->
+    NextPeerPid = orddict:fetch(NextPeerTag, PeerTags),
+    TurnValue = #peer_surrender{session_pid = self(), data = SurrenderData},
+    send_safe(NextPeerPid, TurnValue),
+    {noreply, State#state{
+        peer_queue = [ NextPeerTag, CurrentPeerTag ],
+        is_surrender_negotiation = true,
+        last_turn = TurnValue
+    }};
+
+%% Peer acknowledges another peer surrender
+handle_cast(
+    {surrender, CurrentPeerTag, _SurrenderData},
+    #state{
+        game_token = Token,
+        peer_queue = [ CurrentPeerTag, _NextPeerTag ],
+        peer_tags = PeerTags,
+        is_surrender_negotiation = true
+    } = State
+) ->
+    [ send_safe(P, #game_stop{ session_pid = self(), token = Token, tag = T }) || {T, P} <- PeerTags ],
+    {stop, normal, State};
+
+handle_cast(
+    {surrender, FailedPeerTag, _SurrenderData},
     #state{
         peer_tags = PeerTags,
         peer_queue = [ ActualPeerTag, FailedPeerTag ],
         reconnect_timers = ReconnectTimers
     } = State
-) when FailedPeerTag =:= CurrentPeerTag->
-    ActualPeerPid = orddict:fetch(ActualPeerTag, PeerTags),
-    ActualPeerPid ! #peer_lost{session_pid = self()},
-
-    FailedPeerPid = orddict:fetch(FailedPeerTag, PeerTags),
-    FailedPeerPid ! #illegal_turn{session_pid = self()},
-    TimerId = make_ref(),
-    erlang:send_after(2000, self(), {reconnect_timeout, FailedPeerTag, TimerId}),
+) ->
+    TimerId = handle_turn_violation(ActualPeerTag, FailedPeerTag, PeerTags),
     {noreply, State#state{
-        reconnect_timers = orddict:store(FailedPeerTag, TimerId, ReconnectTimers)
+        reconnect_timers = orddict:store(FailedPeerTag, TimerId, ReconnectTimers),
+        peer_tags = orddict:store(FailedPeerTag, undefined, PeerTags)
     }};
 
 handle_cast(
@@ -188,11 +231,7 @@ handle_cast(
         game_token = Token
     } = State
 ) ->
-    [ P ! #game_stop{
-        session_pid = self(),
-        token = Token,
-        tag = T
-    } || {T, P} <- PeerTags ],
+    [ send_safe(P, #game_stop{ session_pid = self(), token = Token, tag = T }) || {T, P} <- PeerTags ],
     {stop, normal, State};
 
 handle_cast(_, State) ->
@@ -207,11 +246,12 @@ handle_info(
 ) ->
     case lists:keyfind(Pid, 2, PeerTags) of
         {Tag, Pid} ->
-            [ P ! #peer_lost{session_pid = self()} || {T, P} <- PeerTags, T =/= Tag],
+            [ send_safe(P, #peer_lost{session_pid = self()}) || {T, P} <- PeerTags, T =/= Tag ],
             TimerId = make_ref(),
             erlang:send_after(2000, self(), {reconnect_timeout, Tag, TimerId}),
             {noreply, State#state{
-                reconnect_timers = orddict:store(Tag, TimerId, ReconnectTimers)
+                reconnect_timers = orddict:store(Tag, TimerId, ReconnectTimers),
+                peer_tags = orddict:store(Tag, undefined, PeerTags)
             }};
         _ ->
             {noreply, State}
@@ -246,8 +286,24 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 
-consider_repeat_turn({Tag, Data}, Tag, NewPeerPid) ->
-    NewPeerPid ! #peer_turn{session_pid = self(), data = Data},
+consider_repeat_turn(undefined, _NewPeerPid) ->
     ok;
-consider_repeat_turn(_, _Tag, _NewPeerPid) ->
+consider_repeat_turn(Turn, NewPeerPid) ->
+    NewPeerPid ! Turn,
     ok.
+
+
+send_safe(undefined, _) ->
+    ok;
+send_safe(Pid, Message) when is_pid(Pid) ->
+    erlang:send(Pid, Message),
+    ok.
+
+handle_turn_violation(ActualPeerTag, FailedPeerTag, PeerTags) ->
+    ActualPeerPid = orddict:fetch(ActualPeerTag, PeerTags),
+    send_safe(ActualPeerPid, #peer_lost{session_pid = self()}),
+    FailedPeerPid = orddict:fetch(FailedPeerTag, PeerTags),
+    send_safe(FailedPeerPid, #illegal_turn{session_pid = self()}),
+    TimerId = make_ref(),
+    erlang:send_after(2000, self(), {reconnect_timeout, FailedPeerTag, TimerId}),
+    TimerId.
