@@ -50,7 +50,7 @@ server_ping_test_() ->
     fixture(
         fun(_) ->
             {ok, Socket} = gen_tcp:connect("localhost", 7891, [{active, false}, binary]),
-            ReadResult = gen_tcp:recv(Socket, 4, 1000),
+            ReadResult = gen_tcp:recv(Socket, 32, 1000),
             [
                 ?_assertMatch({ok, ?PING_PACKET}, ReadResult)
             ]

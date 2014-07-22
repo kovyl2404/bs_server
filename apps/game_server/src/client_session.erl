@@ -435,7 +435,7 @@ terminate(
 ) ->
     lager:debug(
         "Client session ~p stopped in state ~p with reason ~p. State data ~p",
-        [PeerName, Reason, StateName, State]
+        [PeerName, StateName, Reason, State]
     ),
     ok.
 

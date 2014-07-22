@@ -5,14 +5,14 @@
 -include_lib("game_server/include/client_protocol.hrl").
 
 feed_command_at_once_test_() ->
-    Parser = protocol_parser:init(),
+    Parser = protocol_parser:init(4),
     {ok, _, Messages} = protocol_parser:feed(Parser, <<1,2,3,4>>),
     [
         ?_assertEqual([{command, <<1,2,3,4>>}], Messages)
     ].
 
 feed_redundant_bytes_command_test_() ->
-    Parser = protocol_parser:init(),
+    Parser = protocol_parser:init(4),
     {ok, Parser1, Messages1} = protocol_parser:feed(Parser, <<1,2,3,4, 5, 6>>),
     {ok, _, Messages2} = protocol_parser:feed(Parser1, <<7, 8>>),
     [
@@ -21,7 +21,7 @@ feed_redundant_bytes_command_test_() ->
     ].
 
 feed_insufficient_bytes_command_test_() ->
-    Parser = protocol_parser:init(),
+    Parser = protocol_parser:init(4),
     {ok, Parser1, Messages1} = protocol_parser:feed(Parser, <<1,2>>),
     {ok, _, Messages2} = protocol_parser:feed(Parser1, <<3, 4, 5, 6, 7, 8>>),
     [
@@ -30,7 +30,7 @@ feed_insufficient_bytes_command_test_() ->
     ].
 
 feed_data_at_once_test_() ->
-    Parser = protocol_parser:init(),
+    Parser = protocol_parser:init(32),
     DataHeader = ?SERVER_PACKET(5),
     Data = <<1,2,3,4,5>>,
     {ok, _, Messages} = protocol_parser:feed(Parser, <<DataHeader/binary, Data/binary>>),
@@ -49,7 +49,7 @@ feed_data_by_chunks_test_() ->
                 Byte = binary:at(Frame, I-1),
                 {ok, NewParser, Messages} = protocol_parser:feed(Parser, <<Byte>>),
                 {NewParser, Acc++Messages}
-            end, {protocol_parser:init(), []}, lists:seq(1, FrameLength)
+            end, {protocol_parser:init(32), []}, lists:seq(1, FrameLength)
         ),
     [
         ?_assertEqual([{data, <<1,2,3,4,5>>}], ResultMessages)

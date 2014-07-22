@@ -17,6 +17,11 @@ game_reconnect_test_() ->
         fun() -> ok end,
         fun(_) -> ok end,
         fun(_) ->
+            TurnData =
+                <<
+                    1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4,
+                    1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4
+                >>,
             {Time, Tests} =
                 timer:tc(
                     fun() ->
@@ -42,7 +47,7 @@ game_reconnect_test_() ->
 
                                 ok = client_emulator:stop(SecondEmulator),
                                 {ok, normal} = lobby_utils:wait_process_down_reason(EmulatorMonitor, 100),
-                                ok = client_emulator:make_turn(FirstEmulator, <<1,2,3,4>>),
+                                ok = client_emulator:make_turn(FirstEmulator, TurnData),
 
                                 {ok, NewSecondEmulator} = client_emulator:start("localhost", 7890),
                                 ok = client_emulator:reconnect_game(NewSecondEmulator, ReconnectData),
@@ -62,7 +67,7 @@ game_reconnect_test_() ->
 
                                 Acc ++ [
                                     ?_assertMatch({ok, {game_start, false, _}}, ReconnectResult),
-                                    ?_assertMatch({ok, {turn, <<1,2,3,4>>}}, TurnResult),
+                                    ?_assertMatch({ok, {turn, TurnData}}, TurnResult),
                                     ?_assertMatch({ok, surrender}, SurrenderResult),
                                     ?_assertMatch({ok, game_stop}, GameStopResult1),
                                     ?_assertMatch({ok, game_stop}, GameStopResult2)
@@ -188,7 +193,12 @@ make_turn(ClientEmulator, 0) ->
             error
     end;
 make_turn(ClientEmulator, TurnsLeft) ->
-    ok = client_emulator:make_turn(ClientEmulator, <<1,2,3,4>>),
+    TurnData =
+        <<
+            1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4,
+            1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4
+        >>,
+    ok = client_emulator:make_turn(ClientEmulator, TurnData),
     case lobby_utils:wait_from_pid(ClientEmulator, 1000) of
         {ok, surrender} ->
             ok = client_emulator:surrender(ClientEmulator),

@@ -53,7 +53,8 @@ start_game_test_() ->
             ok = meck:expect(
                 mock_session_writer, send,
                 fun(_Socket, Data) ->
-                    TestHost ! {self(), protocol_parser:parse(iolist_to_binary(Data))},
+                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+                    TestHost ! {self(), ParseResult},
                     ok
                 end
             ),
@@ -534,13 +535,23 @@ peer_lost_test_() ->
 peer_first_turn_test_() ->
     fixture(
         fun(_) ->
+            TurnData =
+                <<
+                    1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4,
+                    1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4
+                >>,
+            AnotherTurnData  =
+                <<
+                    4, 3, 2, 1, 4, 3, 2, 1, 4, 3, 2, 1,4, 3, 2, 1,
+                    4, 3, 2, 1, 4, 3, 2, 1, 4, 3, 2, 1,4, 3, 2, 1
+                >>,
             TestHost = self(),
             ClientFun =
                 fun() ->
                     {ok, Token} = game_lobby:checkin(self()),
                     {ok, #game_start{ token = Token, turn = true, session_pid = SessionPid, tag = PeerTag}}
                         = lobby_utils:wait_game_start(),
-                    ok = game_session:make_turn(SessionPid, PeerTag, <<1,2,3,4>>),
+                    ok = game_session:make_turn( SessionPid, PeerTag, TurnData),
                     PeerTurnResult = lobby_utils:wait_peer_turn(SessionPid, 1000),
                     TestHost ! {self(), PeerTurnResult}
                 end,
@@ -559,12 +570,12 @@ peer_first_turn_test_() ->
             {ok, [{command, _}, {data, _}]} = lobby_utils:wait_from_pid(RemoteClientPid, 100),
             LocalPeerTurnResult = lobby_utils:wait_from_pid(RemoteClientPid, 100),
 
-            ok = client_session:send_command(RemoteClientPid, {command, <<4,3,2,1>>}),
+            ok = client_session:send_command(RemoteClientPid, {command, AnotherTurnData}),
             RemotePeerTurnResult = lobby_utils:wait_from_pid(LocalClientPid, 1000),
 
             [
-                ?_assertEqual({ok, [{command, <<1,2,3,4>>}]}, LocalPeerTurnResult),
-                ?_assertMatch({ok, {ok, #peer_turn{data = <<4,3,2,1>>}}}, RemotePeerTurnResult)
+                ?_assertEqual({ok, [{command, TurnData}]}, LocalPeerTurnResult),
+                ?_assertMatch({ok, {ok, #peer_turn{data = AnotherTurnData}}}, RemotePeerTurnResult)
             ]
 
         end
@@ -586,7 +597,8 @@ peer_surrender_test_() ->
             ok = meck:expect(
                 mock_session_writer, send,
                 fun(_, Data) ->
-                    TestHost ! {self(), protocol_parser:parse(iolist_to_binary(Data))},
+                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+                    TestHost ! {self(), ParseResult},
                     ok
                 end
             ),
@@ -611,6 +623,11 @@ peer_surrender_test_() ->
 turn_instead_of_surrender_ack_test_() ->
     fixture(
         fun(_) ->
+            TurnData =
+                <<
+                    1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4,
+                    1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4
+                >>,
             TestHost = self(),
             ClientFun =
                 fun() ->
@@ -633,8 +650,8 @@ turn_instead_of_surrender_ack_test_() ->
             RemoteClientRef = monitor(process, RemoteClientPid),
             ok = client_session:send_command(RemoteClientPid, {command, ?START_GAME_PACKET(0)}),
             {ok, [{command, _}, {data, _}]} = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-            {ok, [{command, <<123, 0, 0, 0>>}]} = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-            ok = client_session:send_command(RemoteClientPid, {command, <<1,2,3,4>>}),
+            {ok, [{command, ?SURRENDER_PACKET(0,0,0)}]} = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+            ok = client_session:send_command(RemoteClientPid, {command, TurnData}),
             LocalPeerGameStopResult = lobby_utils:wait_from_pid(LocalClientPid, 100),
             RemotePeerDownResult = lobby_utils:wait_process_down_reason(RemoteClientRef, 100),
             [

@@ -178,16 +178,16 @@ handle_info(
 
 
 handle_info(
-    {command, ?START_GAME_PACKET = StartGame},
+    {command, ?START_GAME_PACKET(Data)},
     #state{
         socket = _Socket,
         owner = Owner
     } = State
 ) ->
     OursTurn =
-        case StartGame of
-            ?START_GAME_PACKET(1) -> true;
-            ?START_GAME_PACKET(0) -> false
+        case Data of
+            1 -> true;
+            0 -> false
         end,
     ReconnectData =
         receive
