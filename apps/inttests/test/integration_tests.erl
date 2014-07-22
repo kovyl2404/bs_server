@@ -73,7 +73,6 @@ game_reconnect_test_() ->
                 ),
             ?debugFmt("Reconnection test: Total execution time ~p uS, ~p games played",[Time, 1000]),
             Tests
-
         end
     }.
 
