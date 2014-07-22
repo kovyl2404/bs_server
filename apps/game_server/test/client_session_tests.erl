@@ -10,7 +10,7 @@ fixture(Inst) ->
     {setup,
         fun() ->
             ok = game_lobby:start(),
-            ok = meck:new(mock_session_writer),
+            ok = meck:new(mock_session_writer, [passthrough]),
             flush_messages()
         end,
         fun(_) ->

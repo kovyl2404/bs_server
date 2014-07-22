@@ -9,3 +9,4 @@
 
 send(_, _) ->
     erlang:error(not_mocked, send).
+

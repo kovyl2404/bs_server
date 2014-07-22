@@ -44,7 +44,8 @@ init({Ref, Socket, Transport, ProtocolOptions}) ->
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [{active, true}]),
     MaxAllowedPings = proplists:get_value(max_pings_allowed, ProtocolOptions),
-    {ok, SessionPid} = supervisor:start_child( client_session_sup,  [Socket, Transport] ),
+    {ok, PeerName} = Transport:peername(Socket),
+    {ok, SessionPid} = supervisor:start_child( client_session_sup,  [Socket, Transport, PeerName] ),
     monitor(process, SessionPid),
     erlang:send(self(), send_ping),
     gen_server:enter_loop(

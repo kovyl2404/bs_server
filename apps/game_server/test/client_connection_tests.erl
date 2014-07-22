@@ -14,7 +14,6 @@ fixture(Inst) ->
     }.
 
 setup() ->
-    %ok = error_logger:tty(false),
     ok = application:start(ranch),
     ok = application:load(game_server),
     ok = application:set_env(game_server, port, 7891),
