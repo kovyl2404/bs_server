@@ -3,15 +3,49 @@
 -behaviour(application).
 
 -export([
-    lookup_profile/1,
-    create_profile/3
+    register/2,
+    login/2,
+    get_by_id/1,
+    set_field/3,
+    get_top/1,
+    increase_field/2
+]).
+
+-export([
+    stop_deps/0,
+    start_deps/0,
+    start/0,
+    stop/0
 ]).
 
 
 %% Application callbacks
 -export([start/2, stop/1]).
 
+
+-include_lib("eunit/include/eunit.hrl").
 -author("Viacheslav V. Kovalev").
+
+
+
+start_deps() ->
+    ok = hackney:start(),
+    ok = couchbeam:start().
+
+stop_deps() ->
+    ok = couchbeam:stop(),
+    ok = hackney:stop().
+
+start() ->
+    ok = start_deps(),
+    ok = application:start(database).
+
+stop() ->
+    ok = application:stop(database),
+    ok = stop_deps().
+
+
+
 
 %% ===================================================================
 %% Application callbacks
@@ -28,42 +62,110 @@ start(_StartType, _StartArgs) ->
 stop(_State) ->
     ok.
 
-create_profile(UserId, Password, ProfileFields) when is_binary(UserId), is_binary(Password) ->
-    case validate_fields(ProfileFields) of
-        {ok, ValidFields} ->
-            do_create_profile(UserId, Password, ValidFields);
-        Error -> Error
+%% ===================================================================
+%% API functions
+%% ===================================================================
+
+
+get_top(Count) ->
+    {BackendModule, BackendState} = get_backend(),
+    BackendModule:get_top(Count, BackendState).
+
+get_by_id(Login) ->
+    {BackendModule, BackendState} = get_backend(),
+    case BackendModule:get_by_id(Login, BackendState) of
+        {ok, {Profile}} ->
+            {ok, Profile};
+        Error ->
+            Error
     end.
 
-do_create_profile(UserId, Password, ValidatedFields) ->
+register(Login, Password) ->
     {BackendModule, BackendState} = get_backend(),
-    DateCreated = database_utils:now_timestamp(),
-    Digest = database_utils:password_digest(Password, DateCreated),
-    BackendModule:store(
-        UserId, [
-            {password_digest, Digest},
-            {date_created, DateCreated}
-            | ValidatedFields
-        ], BackendState
-    ).
+    case BackendModule:get_by_id(Login, BackendState) of
+        {error, not_found} ->
+            create_profile(Login, Password);
+        {ok, _} ->
+            {error, already_registered}
+    end.
 
 
-lookup_profile(UserId) when is_binary(UserId) ->
+
+create_profile(Login, Password) ->
     {BackendModule, BackendState} = get_backend(),
-    BackendModule:lookup_by_id(UserId, BackendState).
+    case BackendModule:create_profile( init_profile(Login, Password), BackendState) of
+        {ok, {Doc}} ->
+            {ok, Doc};
+        {error, _} = Error ->
+            Error
+    end.
 
+login(Login, Password) ->
+    {BackendModule, BackendState} = get_backend(),
+    case BackendModule:get_by_id(Login, BackendState) of
+        {error, not_found} ->
+            {error, not_found};
+        {ok, {Profile}} ->
+            case password_correct(Password, Profile) of
+                true ->
+                    {ok, Profile};
+                false ->
+                    {error, not_found}
+            end
+    end.
 
+set_field(Field, Value, Login) ->
+    {BackendModule, BackendState} = get_backend(),
+    case BackendModule:get_by_id(Login, BackendState) of
+        {error, not_found} ->
+            {error, not_found};
+        {ok, {Profile}} ->
+            NewProfile = [ {Field, Value} | proplists:delete(Field, Profile) ],
+            case BackendModule:create_profile( {NewProfile}, BackendState ) of
+                {ok, {Doc}} ->
+                    {ok, Doc};
+                {error, _} = Error ->
+                    Error
+            end
+    end.
+
+increase_field(Field, Login) ->
+    {BackendModule, BackendState} = get_backend(),
+    case BackendModule:get_by_id(Login, BackendState) of
+        {error, not_found} ->
+            {error, not_found};
+        {ok, {Profile}} ->
+            OldFieldValue = proplists:get_value(Field, Profile),
+            NewProfile = [ {Field, OldFieldValue+1} | proplists:delete(Field, Profile) ],
+            case BackendModule:create_profile( {NewProfile}, BackendState ) of
+                {ok, {Doc}} ->
+                    {ok, Doc};
+                {error, _} = Error ->
+                    Error
+            end
+    end.
 
 get_backend() ->
     [{backend, Result}] = ets:lookup(?MODULE, backend),
     Result.
 
-validate_fields(Fields) ->
-    do_validate(Fields, []).
 
-do_validate([], Acc) ->
-    {ok, Acc};
-do_validate([ {Key, _} = Field | Rest ], Acc) when is_binary(Key) ->
-    do_validate(Rest, [ Field | Acc]);
-do_validate([BadField | _], _) ->
-    {error, {bad_field, BadField}}.
+password_correct(Password, Profile) ->
+    Password == proplists:get_value(<<"password">>, Profile).
+
+init_profile(Login, Password) ->
+    {[
+        {<<"_id">>, Login},
+        {<<"password">>, Password},
+        {<<"rank">>, 0},
+        {<<"experience">>, 0},
+        {<<"achievements">>, [0, 0, 0, 0, 0, 0, 0, 0]},
+        {<<"reserved1">>, 0},
+        {<<"reserved2">>, 0},
+        {<<"reserved3">>, 0},
+        {<<"reserved4">>, 0},
+        {<<"reserved5">>, 0},
+        {<<"reserved6">>, 0},
+        {<<"reserved7">>, 0},
+        {<<"score">>, 0}
+    ]}.
