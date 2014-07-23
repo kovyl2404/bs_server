@@ -21,6 +21,7 @@
 
 -export([
     init/1,
+    guest/2,
     idle/2,
     waiting_for_game/2,
     running_game/2,
@@ -52,6 +53,7 @@ send_ping(Session, SeqId) ->
 
 -record(
     state, {
+        profile_backend      = undefined,
         socket               = eralng:error(required, socket),
         transport            = eralng:error(required, transport),
         game_token           = undefined,
@@ -65,7 +67,14 @@ send_ping(Session, SeqId) ->
 
 init({Socket, Transport, PeerName}) ->
     lager:info("New client connected from ~p", [PeerName]),
-    {ok, idle, #state{
+    ProfileBackend = profile_backend(),
+    InitState =
+        case ProfileBackend of
+            undefined -> idle;
+            _ -> guest
+        end,
+    {ok, InitState, #state{
+        profile_backend = ProfileBackend,
         socket = Socket,
         transport = Transport,
         peer_name = PeerName
@@ -94,6 +103,65 @@ handle_event(
 handle_sync_event(_, _, _StateName, State) ->
     {stop, unexpected_sync_event, State}.
 
+guest(
+    {data, <<?LOGIN_TAG, AuthRequest/binary>>},
+    #state{
+        profile_backend = ProfileBackend,
+        transport = Transport,
+        socket = Socket
+    } = State
+) ->
+    case session_utils:decode_auth_request(AuthRequest) of
+        {ok, {Login, Password}} ->
+            case ProfileBackend:login(Login, Password) of
+                {ok, _} ->
+                    Transport:send(
+                        Socket,
+                        session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(true)])
+                    ),
+                    {next_state, idle, State};
+                {error, not_found} ->
+                    Transport:send(
+                        Socket,
+                        session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(false)])
+                    ),
+                    {next_state, guest, State}
+            end;
+        _Error ->
+            {stop, protocol_violation, State}
+    end;
+
+guest(
+    {data, <<?REGISTER_TAG, RegisterRequest/binary>>},
+    #state{
+        profile_backend = ProfileBackend,
+        transport = Transport,
+        socket = Socket
+    } = State
+) ->
+    case session_utils:decode_auth_request(RegisterRequest) of
+        {ok, {Login, Password}} ->
+            case ProfileBackend:register(Login, Password) of
+                {ok, _} ->
+                    Transport:send(
+                        Socket,
+                        session_utils:make_server_frame([?REGISTER_TAG, session_utils:encode_auth_response(true)])
+                    ),
+                    {next_state, idle, State};
+                {error, already_registered} ->
+                    Transport:send(
+                        Socket,
+                        session_utils:make_server_frame([?REGISTER_TAG, session_utils:encode_auth_response(false)])
+                    ),
+                    {next_state, guest, State}
+            end;
+        _Error ->
+            {stop, protocol_violation, State}
+    end;
+
+guest(_, State) ->
+    {stop, not_auth, State}.
+
 idle(
     {command, ?START_GAME_PACKET(?NEW_GAME_FLAG)},
     #state{
@@ -113,6 +181,9 @@ idle(
 
 idle( {command, Command}, #state{peer_name = PeerName} = State ) ->
     lager:debug("Received unexpected command ~p from ~p in idle state", [Command, PeerName]),
+    {stop, protocol_violation, State};
+
+idle( _, State ) ->
     {stop, protocol_violation, State}.
 
 
@@ -166,12 +237,12 @@ waiting_for_game(
 
 
 waiting_for_game(
-    {command, UnexpectedCommand},
+    UnexpectedMessage,
     #state{
         peer_name = PeerName
     } = State
 ) ->
-    lager:error("Unexpected message ~p for ~p in waiting_for_game state", [UnexpectedCommand, PeerName]),
+    lager:error("Unexpected message ~p for ~p in waiting_for_game state", [UnexpectedMessage, PeerName]),
     {stop, protocol_violation, State}.
 
 
@@ -260,17 +331,32 @@ running_game(
         "Received unexpected TURN ~p from ~p in running_game (out of order)",
         [Turn, PeerName]
     ),
+    {stop, protocol_violation, State};
+
+running_game(
+    {data, UnexpectedData},
+    #state{
+        game_session = _,
+        client_tag = _,
+        is_ours_turn = false,
+        peer_name = PeerName
+    } = State
+) ->
+    lager:error(
+        "Received unexpected DATA ~p from ~p in running_game",
+        [UnexpectedData, PeerName]
+    ),
     {stop, protocol_violation, State}.
 
 stopping_game(
-    {command, Command},
+    UnexpectedMessage,
     #state{
         peer_name = PeerName
     } = State
 ) ->
     lager:error(
         "Received unexpected command ~p from ~p in stopping_game",
-        [Command, PeerName]
+        [UnexpectedMessage, PeerName]
     ),
     {stop, protocol_violation, State};
 
@@ -445,3 +531,9 @@ turn_flag(false) -> 0.
 
 update_profile_wins() ->
     ok.
+
+profile_backend() ->
+    case application:get_env(game_server, profile) of
+        {ok, Value} -> Value;
+        _ -> undefined
+    end.

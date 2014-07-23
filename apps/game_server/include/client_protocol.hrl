@@ -80,4 +80,12 @@
     >>
 ).
 
+-define(
+    REGISTER_TAG, 1
+).
+
+-define(
+    LOGIN_TAG, 0
+).
+
 -endif.
