@@ -2,14 +2,128 @@
 -author("Viacheslav V. Kovalev").
 
 -include_lib("game_server/include/client_protocol.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 %% API
 -export([
-    make_server_frame/1
+    make_server_frame/1,
+    strip_trailing_zeros/1,
+    allign_string/2,
+    encode_auth_request/2,
+    decode_auth_request/1,
+    encode_auth_response/1,
+    decode_auth_response/1,
+    encode_profile_request/1,
+    decode_profile_request/1
 ]).
 
-make_server_frame(Binary) ->
-    PayloadLength = iolist_size(Binary),
+make_server_frame(Iolist) ->
+    PayloadLength = iolist_size(Iolist),
     [
-        ?SERVER_PACKET(PayloadLength), Binary
+        ?SERVER_PACKET(PayloadLength), Iolist
     ].
+
+allign_string(Binary, Length) ->
+    case byte_size(Binary) of
+        Value when Value>Length ->
+            erlang:error(string_too_long);
+        Value when Value =:= Length ->
+            Binary;
+        Value ->
+            AppendLength = Length - Value,
+            Padding = list_to_binary(lists:duplicate(AppendLength, 0)),
+            <<Binary/binary, Padding/binary>>
+    end.
+
+strip_trailing_zeros(Binary) ->
+    list_to_binary( lists:reverse(do_strip_zeros( lists:reverse( binary:bin_to_list(Binary) ) )) ).
+
+do_strip_zeros( [ 0 | Rest]) ->
+    do_strip_zeros(Rest);
+do_strip_zeros(Rest) ->
+    Rest.
+
+encode_auth_request(Login, Password) ->
+    [
+        allign_string(Login, 64),
+        allign_string(Password, 64)
+    ].
+
+decode_auth_request(Packet) ->
+    case Packet of
+        <<Login:64/binary, Password:64/binary>> ->
+            {ok, {strip_trailing_zeros(Login), strip_trailing_zeros(Password)}};
+        _ ->
+            {error, invalid_packet}
+    end.
+
+encode_profile_request(RawProfile) ->
+    Profile = orddict:from_list(RawProfile),
+    Rank = orddict:fetch(<<"rank">>, Profile),
+    Experience = orddict:fetch(<<"experience">>, Profile),
+    Reserved1 = orddict:fetch(<<"reserved1">>, Profile),
+    Reserved2 = orddict:fetch(<<"reserved2">>, Profile),
+    Reserved3 = orddict:fetch(<<"reserved3">>, Profile),
+    Reserved4 = orddict:fetch(<<"reserved4">>, Profile),
+    Reserved5 = orddict:fetch(<<"reserved5">>, Profile),
+    Reserved6 = orddict:fetch(<<"reserved6">>, Profile),
+    Reserved7 = orddict:fetch(<<"reserved7">>, Profile),
+    Score = orddict:fetch(<<"score">>, Profile),
+    Achievements = list_to_binary(orddict:fetch(<<"achievements">>, Profile)),
+    <<
+        Rank:4/unsigned-big-integer,
+        Experience:4/unsigned-big-integer,
+        Reserved1:4/unsigned-big-integer,
+        Reserved2:4/unsigned-big-integer,
+        Reserved3:4/unsigned-big-integer,
+        Reserved4:4/unsigned-big-integer,
+        Reserved5:4/unsigned-big-integer,
+        Reserved6:4/unsigned-big-integer,
+        Reserved7:4/unsigned-big-integer,
+        Score:4/unsigned-big-integer,
+        Achievements/binary
+    >>.
+
+decode_profile_request(Packet) ->
+    case Packet of
+        <<Rank:4/unsigned-big-integer,
+            Experience:4/unsigned-big-integer,
+            Reserved1:4/unsigned-big-integer,
+            Reserved2:4/unsigned-big-integer,
+            Reserved3:4/unsigned-big-integer,
+            Reserved4:4/unsigned-big-integer,
+            Reserved5:4/unsigned-big-integer,
+            Reserved6:4/unsigned-big-integer,
+            Reserved7:4/unsigned-big-integer,
+            Score:4/unsigned-big-integer,
+            Achievements:8/binary
+        >> ->
+            Profile = [
+                {<<"rank">>, Rank},
+                {<<"experience">>, Experience},
+                {<<"reserved1">>, Reserved1},
+                {<<"reserved2">>, Reserved2},
+                {<<"reserved3">>, Reserved3},
+                {<<"reserved4">>, Reserved4},
+                {<<"reserved5">>, Reserved5},
+                {<<"reserved6">>, Reserved6},
+                {<<"reserved7">>, Reserved7},
+                {<<"score">>, Score},
+                {<<"achievements">>, binary_to_list(Achievements)}
+            ],
+            {ok, Profile};
+        _ ->
+            {error, invalid_packet}
+    end.
+
+encode_auth_response(true) ->
+    <<1>>;
+encode_auth_response(false) ->
+    <<0>>.
+
+decode_auth_response(<<1>>) ->
+    {ok, true};
+decode_auth_response(<<0>>) ->
+    {ok, false};
+decode_auth_response(_X) ->
+    {error, invalid_packet}.

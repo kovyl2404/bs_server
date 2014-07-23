@@ -4,14 +4,24 @@
 
 -behaviour(application).
 
--define(CLIENT_SESSION_DEPS, [ranch, game_lobby]).
+-define(
+    CLIENT_SESSION_DEPS,
+    [
+        game_lobby
+    ]
+).
 -define(DEFAULT_ACCEPTORS_COUNT, 100).
 
 %% Application callbacks
 -export([
-    start/0,
     start/2, stop/1
 ]).
+
+%% Helpers
+-export([
+   start/0, stop/0
+]).
+
 
 %% ===================================================================
 %% Application callbacks
@@ -20,6 +30,10 @@
 start() ->
     ok = start_deps(),
     ok = application:start(game_server).
+
+stop() ->
+    ok = application:stop(game_server),
+    ok = stop_deps().
 
 start(_StartType, _StartArgs) ->
     {ok, _} =
@@ -40,6 +54,14 @@ start_deps() ->
         fun(App) ->
             ok = application:start(App)
         end, ?CLIENT_SESSION_DEPS
+    ).
+
+stop_deps() ->
+    lists:foreach(
+        fun(App) ->
+            ok = application:stop(App),
+            ok = application:unload(App)
+        end, lists:reverse(?CLIENT_SESSION_DEPS)
     ).
 
 
