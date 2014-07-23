@@ -83,6 +83,7 @@
 -define( LOGIN_TAG, 0 ).
 -define( REGISTER_TAG, 1 ).
 -define( PROFILE_TAG, 2 ).
+-define( TOP_TAG, 3 ).
 
 
 

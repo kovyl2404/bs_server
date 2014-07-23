@@ -52,6 +52,7 @@ encode_decode_profile_test() ->
     ],
     Packet = session_utils:encode_profile_request(Profile),
     {ok, DecodedProfile} = session_utils:decode_profile_request(Packet),
+
     [
         ?_assertEqual(lists:sort(Profile), lists:sort(DecodedProfile))
     ].

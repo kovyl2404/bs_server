@@ -170,6 +170,21 @@ guest(
             {stop, protocol_violation, State}
     end;
 
+guest(
+    {data, <<?TOP_TAG, TopRequest>>},
+    #state{
+        profile_backend = ProfileBackend,
+        socket = Socket,
+        transport = Transport
+    } = State
+) ->
+    {ok, Top} = ProfileBackend:get_top(TopRequest),
+    Transport:send(
+        Socket,
+        session_utils:make_server_frame([?TOP_TAG, session_utils:encode_top_response(Top)])
+    ),
+    {noreply, State};
+
 guest(_, State) ->
     {stop, not_auth, State}.
 
@@ -212,6 +227,21 @@ idle(
         ]
     ),
     {next_state, idle, State};
+
+idle(
+    {data, <<?TOP_TAG, TopRequest>>},
+    #state{
+        profile_backend = ProfileBackend,
+        socket = Socket,
+        transport = Transport
+    } = State
+) when ProfileBackend =/= undefined ->
+    {ok, Top} = ProfileBackend:get_top(TopRequest),
+    Transport:send(
+        Socket,
+        session_utils:make_server_frame([?TOP_TAG, session_utils:encode_top_response(Top)])
+    ),
+    {noreply, State};
 
 idle( _, State ) ->
     {stop, protocol_violation, State}.

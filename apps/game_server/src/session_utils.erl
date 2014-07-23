@@ -14,7 +14,9 @@
     encode_auth_response/1,
     decode_auth_response/1,
     encode_profile_request/1,
-    decode_profile_request/1
+    decode_profile_request/1,
+    encode_top_response/1,
+    decode_top_request/1
 ]).
 
 make_server_frame(Iolist) ->
@@ -71,31 +73,31 @@ encode_profile_request(RawProfile) ->
     Score = orddict:fetch(<<"score">>, Profile),
     Achievements = list_to_binary(orddict:fetch(<<"achievements">>, Profile)),
     <<
-        Rank:4/unsigned-big-integer,
-        Experience:4/unsigned-big-integer,
-        Reserved1:4/unsigned-big-integer,
-        Reserved2:4/unsigned-big-integer,
-        Reserved3:4/unsigned-big-integer,
-        Reserved4:4/unsigned-big-integer,
-        Reserved5:4/unsigned-big-integer,
-        Reserved6:4/unsigned-big-integer,
-        Reserved7:4/unsigned-big-integer,
-        Score:4/unsigned-big-integer,
+        Rank:4/unsigned-big-integer-unit:8,
+        Experience:4/unsigned-big-integer-unit:8,
+        Reserved1:4/unsigned-big-integer-unit:8,
+        Reserved2:4/unsigned-big-integer-unit:8,
+        Reserved3:4/unsigned-big-integer-unit:8,
+        Reserved4:4/unsigned-big-integer-unit:8,
+        Reserved5:4/unsigned-big-integer-unit:8,
+        Reserved6:4/unsigned-big-integer-unit:8,
+        Reserved7:4/unsigned-big-integer-unit:8,
+        Score:4/unsigned-big-integer-unit:8,
         Achievements/binary
     >>.
 
 decode_profile_request(Packet) ->
     case Packet of
-        <<Rank:4/unsigned-big-integer,
-            Experience:4/unsigned-big-integer,
-            Reserved1:4/unsigned-big-integer,
-            Reserved2:4/unsigned-big-integer,
-            Reserved3:4/unsigned-big-integer,
-            Reserved4:4/unsigned-big-integer,
-            Reserved5:4/unsigned-big-integer,
-            Reserved6:4/unsigned-big-integer,
-            Reserved7:4/unsigned-big-integer,
-            Score:4/unsigned-big-integer,
+        <<Rank:4/unsigned-big-integer-unit:8,
+            Experience:4/unsigned-big-integer-unit:8,
+            Reserved1:4/unsigned-big-integer-unit:8,
+            Reserved2:4/unsigned-big-integer-unit:8,
+            Reserved3:4/unsigned-big-integer-unit:8,
+            Reserved4:4/unsigned-big-integer-unit:8,
+            Reserved5:4/unsigned-big-integer-unit:8,
+            Reserved6:4/unsigned-big-integer-unit:8,
+            Reserved7:4/unsigned-big-integer-unit:8,
+            Score:4/unsigned-big-integer-unit:8,
             Achievements:8/binary
         >> ->
             Profile = [
@@ -114,6 +116,25 @@ decode_profile_request(Packet) ->
             {ok, Profile};
         _ ->
             {error, invalid_packet}
+    end.
+
+encode_top_response(Top) ->
+    Count = length(Top),
+    TopData =
+        lists:foldl(
+            fun({Rank, Login}, Acc) ->
+                [<<Rank:4/unsigned-big-integer-unit:8>>, allign_string(Login, 32) | Acc]
+            end, [], lists:reverse(Top)
+        ),
+    [
+        <<Count>>, TopData
+    ].
+
+decode_top_request(TopRequest) ->
+    case TopRequest of
+        <<TopCount>> ->
+            {ok, TopCount};
+        _ -> {error, invalid_packet}
     end.
 
 encode_auth_response(true) ->

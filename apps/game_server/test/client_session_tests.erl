@@ -205,6 +205,98 @@ register_in_idle_state_test_() ->
         end
     ).
 
+request_top_test_() ->
+    Top = [
+        {10, <<"user1">>},
+        {5, <<"user2">>},
+        {3, <<"user5">>},
+        {2, <<"user3">>},
+        {1, <<"user4">>}
+    ],
+    fixture(
+        fun(_) ->
+            TestHost = self(),
+            ok = application:set_env(game_server, profile, database),
+
+            ok = meck:expect(
+                mock_session_writer, send,
+                fun(_Socket, Data) ->
+                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+                    TestHost ! {self(), ParseResult},
+                    ok
+                end
+            ),
+            ok = meck:new(database),
+            ok =
+                meck:expect(
+                    database, get_top,
+                    fun(Count) ->
+                        TestHost ! {self(), {get_top, Count}},
+                        {ok, Top}
+                    end
+                ),
+            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+
+            TopRequest = iolist_to_binary(<<?TOP_TAG, 5>>),
+            ok = client_session:send_command( RemoteClientPid, {data, TopRequest} ),
+
+            GetTop = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+            ok = meck:unload(database),
+            Res = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+            ExpectedTopData = iolist_to_binary(session_utils:encode_top_response(Top)),
+            [
+                ?_assertEqual({ok, {get_top, 5}}, GetTop),
+                ?_assertEqual({ok, [{data, <<?TOP_TAG, ExpectedTopData/binary>>}]}, Res)
+            ]
+        end
+    ).
+
+request_top_few_data_test_() ->
+    Top = [
+        {10, <<"user1">>},
+        {5, <<"user2">>},
+        {3, <<"user5">>},
+        {2, <<"user3">>},
+        {1, <<"user4">>}
+    ],
+    fixture(
+        fun(_) ->
+            TestHost = self(),
+            ok = application:set_env(game_server, profile, database),
+
+            ok = meck:expect(
+                mock_session_writer, send,
+                fun(_Socket, Data) ->
+                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+                    TestHost ! {self(), ParseResult},
+                    ok
+                end
+            ),
+            ok = meck:new(database),
+            ok =
+                meck:expect(
+                    database, get_top,
+                    fun(Count) ->
+                        TestHost ! {self(), {get_top, Count}},
+                        {ok, Top}
+                    end
+                ),
+            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+
+            TopRequest = iolist_to_binary(<<?TOP_TAG, 10>>),
+            ok = client_session:send_command( RemoteClientPid, {data, TopRequest} ),
+
+            GetTop = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+            ok = meck:unload(database),
+            Res = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+            ExpectedTopData = iolist_to_binary(session_utils:encode_top_response(Top)),
+            [
+                ?_assertEqual({ok, {get_top, 10}}, GetTop),
+                ?_assertEqual({ok, [{data, <<?TOP_TAG, ExpectedTopData/binary>>}]}, Res)
+            ]
+        end
+    ).
+
 login_test_() ->
     Profile = [
         {<<"rank">>, 1},
