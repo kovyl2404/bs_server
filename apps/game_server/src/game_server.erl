@@ -22,10 +22,11 @@ start() ->
     ok = application:start(game_server).
 
 start(_StartType, _StartArgs) ->
-    ranch:start_listener(
-        ?MODULE, ?DEFAULT_ACCEPTORS_COUNT, ranch_tcp, transport_options(),
-        client_connection, connection_options()
-    ),
+    {ok, _} =
+        ranch:start_listener(
+            ?MODULE, ?DEFAULT_ACCEPTORS_COUNT, ranch_tcp, transport_options(),
+            client_connection, connection_options()
+        ),
     client_session_sup:start_link().
 
 stop(_State) ->
