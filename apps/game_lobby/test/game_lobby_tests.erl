@@ -50,6 +50,21 @@ checkin_while_lobby_down_test_() ->
         ?_assertEqual({error, server_fault}, LobbyReply)
     ].
 
+down_after_checkin_test_() ->
+    fixture(
+        fun(_) ->
+            ClientPid = spawn( fun() -> receive stop -> ok end end ),
+            {ok, Token} = game_lobby:checkin(ClientPid),
+            ClientPid ! stop,
+            timer:sleep(100),
+            {ok, NewToken} = game_lobby:checkin(self()),
+
+            [
+                ?_assertNotEqual(Token, NewToken)
+            ]
+        end
+    ).
+
 checkin_test_() ->
     fixture(
         fun(_) ->
