@@ -54,8 +54,12 @@ feed(
         <<Command:CommandLength/binary-unit:8, Rest/binary>> ->
             case Command of
                 ?SERVER_PACKET(MessageLength) ->
-                    MessageLength >= ?DATA_SIZE_LIMIT andalso erlang:error(message_too_long),
-                    feed(#read_data{bytes_needed = MessageLength, next_command_length = CommandLength}, Rest);
+                    case MessageLength >= ?DATA_SIZE_LIMIT of
+                        true ->
+                            {error, {message_too_long, MessageLength}};
+                        false ->
+                            feed(#read_data{bytes_needed = MessageLength, next_command_length = CommandLength}, Rest)
+                    end;
                 Command ->
                     {ok, NewState, Messages} = feed(#read_command{command_length = CommandLength}, Rest),
                     {ok, NewState, [{command, Command} | Messages]}

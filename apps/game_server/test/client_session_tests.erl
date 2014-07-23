@@ -766,53 +766,6 @@ cancel_running_game_test_() ->
         end
     ).
 
-fail_cancel_running_game_test_() ->
-    fixture(
-        fun(_) ->
-            TestHost = self(),
-            ClientFun =
-                fun() ->
-                    {ok, Token} = game_lobby:checkin(self(), "red"),
-                    {ok, #game_start{ token = Token, turn = true }} = lobby_utils:wait_game_start(),
-                    GameStopResult = lobby_utils:wait_game_stop(),
-                    TestHost ! {self(), GameStopResult}
-                end,
-            LocalClientPid = spawn(ClientFun),
-
-            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
-            ok = meck:expect(
-                mock_session_writer, send,
-                fun(_, Data) ->
-                    TestHost ! {self(), protocol_parser:parse(iolist_to_binary(Data))},
-                    ok
-                end
-            ),
-            RemoteClientRef = monitor(process, RemoteClientPid),
-            ok = client_session:send_command(RemoteClientPid, {command, ?START_GAME_PACKET(0)}),
-            {ok, [{command, ?START_GAME_PACKET(0)}, {data, _}]} = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-
-            ok = meck:expect(
-                mock_session_writer, send,
-                fun(_, Data) ->
-                    TestHost ! {self(), protocol_parser:parse(iolist_to_binary(Data))},
-                    {error, closed}
-                end
-            ),
-
-            ok = client_session:send_command(RemoteClientPid, {command, ?CANCEL_GAME_PACKET}),
-
-            LocalStopResult = lobby_utils:wait_from_pid(LocalClientPid, 100),
-            RemoteStopResult = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-            RemoteDownResult = lobby_utils:wait_process_down_reason(RemoteClientRef, 100),
-            [
-                ?_assertMatch({ok, #game_stop{}}, LocalStopResult),
-                ?_assertMatch({ok, [{command, ?CANCEL_GAME_PACKET}]}, RemoteStopResult),
-                ?_assertMatch({ok, normal}, RemoteDownResult)
-            ]
-
-        end
-    ).
-
 reconnect_game_test_() ->
     fixture(
         fun(_) ->

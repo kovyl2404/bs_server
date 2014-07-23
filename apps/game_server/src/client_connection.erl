@@ -7,6 +7,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("game_server/include/client_protocol.hrl").
+-include_lib("game_server/include/logging.hrl").
 
 -define(TIMEOUT, 5000).
 
@@ -46,6 +47,7 @@ init({Ref, Socket, Transport, ProtocolOptions}) ->
     MaxAllowedPings = proplists:get_value(max_pings_allowed, ProtocolOptions),
     {ok, PeerName} = Transport:peername(Socket),
     {ok, SessionPid} = supervisor:start_child( client_session_sup,  [Socket, Transport, PeerName] ),
+    ?DEBUG("Starting new client session ~p, peer ~p",[SessionPid, PeerName]),
     monitor(process, SessionPid),
     erlang:send(self(), send_ping),
     gen_server:enter_loop(
@@ -92,10 +94,9 @@ handle_info(
 ) ->
     case CurSeqId - TheirSeqId of
         Diff when Diff >= MaxAllowedPings ->
-            lager:error("Pings lost for session ~p",[SessionPid]),
+            ?DEBUG("Pings lost for client session ~p",[SessionPid]),
             {stop, normal, State};
         _ ->
-            lager:debug("Sending ping ~p to ~p",[CurSeqId, SessionPid]),
             client_session:send_ping(SessionPid, CurSeqId),
             erlang:send_after(PingInterval, self(), send_ping),
             {noreply, State#state{
@@ -108,30 +109,30 @@ handle_info(
     {tcp, _, Data},
     #state{
         parser = Parser,
-        session_pid = SessionPid
+        session_pid = _SessionPid
     } = State
 ) ->
-    lager:debug("Tcp data ~p from ~p, parser ~p",[Data, SessionPid, Parser]),
     case protocol_parser:feed(Parser, Data) of
         {ok, NewParser, Messages} ->
             NewState = handle_messages(Messages, State),
             {noreply, NewState#state{ parser = NewParser}};
         {error, Error} ->
+            ?DEBUG("An parser error ~p occured in client session ~p",[Error,_SessionPid]),
             {stop, Error, State}
     end;
 
 handle_info(
     {tcp_error, _Socket, Reason},
-    #state{session_pid = SessionPid} = State
+    #state{session_pid = _SessionPid} = State
 ) ->
-    lager:debug("An error ~p occured in socet handler ~p",[Reason,SessionPid]),
+    ?DEBUG("An transport error ~p occured in client session ~p",[Reason,_SessionPid]),
     {stop, Reason, State};
 
 handle_info(
     {tcp_closed, _Socket},
-    #state{ session_pid = SessionPid } = State
+    #state{ session_pid = _SessionPid } = State
 ) ->
-    lager:debug("Socket closed by peer in socket handler ~p",[SessionPid]),
+    ?DEBUG("Session handler ~p closed by peer",[_SessionPid]),
     {stop, normal, State};
 
 handle_info(
@@ -171,10 +172,10 @@ handle_messages([Message | RestMessages], State) ->
 handle_message(
     {command, ?PING_PACKET = PingPacket},
     #state{
-        session_pid = SessionPid
+        session_pid = _SessionPid
     } = State
 ) ->
-    lager:debug("Received ping reply ~p from client ~p",[PingPacket, SessionPid]),
+    ?DEBUG("Client ression ~p received ping reply ~p",[_SessionPid, PingPacket]),
     TheirSeqId = ?PING_SEQ_ID(PingPacket),
     State#state{ their_seq_id = TheirSeqId };
 handle_message(
@@ -183,5 +184,6 @@ handle_message(
         session_pid = SessionPid
     } = State
 ) ->
+    ?DEBUG("Client session ~p received message ~p from peer",[SessionPid, Command]),
     ok = client_session:send_command(SessionPid, Command),
     State.

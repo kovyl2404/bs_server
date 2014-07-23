@@ -1,9 +1,10 @@
 -module(client_session).
 
 -behaviour(gen_fsm).
-%-compile([{parse_transform, lager_transform}]).
+
 -include_lib("game_server/include/client_protocol.hrl").
 -include_lib("game_lobby/include/common.hrl").
+-include_lib("game_server/include/logging.hrl").
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -66,7 +67,6 @@ send_ping(Session, SeqId) ->
 ).
 
 init({Socket, Transport, PeerName}) ->
-    lager:info("New client connected from ~p", [PeerName]),
     ProfileBackend = profile_backend(),
     InitState =
         case ProfileBackend of
@@ -97,11 +97,8 @@ handle_event(
 
 handle_event(
     stop, _StateName,
-    #state{
-        peer_name = PeerName
-    } = State
+    State
 ) ->
-    lager:debug("Client session ~p stopped with transport consideration",[PeerName]),
     {stop, normal, State}.
 
 handle_sync_event(_, _, _StateName, State) ->
@@ -115,10 +112,13 @@ guest(
         socket = Socket
     } = State
 ) ->
+    ?DEBUG("Client session ~p (guest) received auth request ~p",[self(), AuthRequest]),
     case session_utils:decode_auth_request(AuthRequest) of
         {ok, {Login, Password}} ->
+            ?DEBUG("Client session ~p trying to authenticate with login ~p and password ~p",[self(), Login, Password]),
             case ProfileBackend:login(Login, Password) of
                 {ok, Profile} ->
+                    ?DEBUG("Client session ~p successfully authenticated",[self()]),
                     EncodedProfile = session_utils:encode_profile_request(Profile),
                     Transport:send(
                         Socket,[
@@ -129,6 +129,7 @@ guest(
                     ),
                     {next_state, idle, State#state{ peer_name = <<"login">>}};
                 {error, not_found} ->
+                    ?DEBUG("Client session ~p failed authentication",[self()]),
                     Transport:send(
                         Socket,
                         session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(false)])
@@ -136,6 +137,7 @@ guest(
                     {next_state, guest, State}
             end;
         _Error ->
+            ?DEBUG("Client session ~p could not decode authenticate request",[self()]),
             {stop, protocol_violation, State}
     end;
 
@@ -147,10 +149,13 @@ guest(
         socket = Socket
     } = State
 ) ->
+    ?DEBUG("Client session ~p (guest) received register request ~p",[self(), RegisterRequest]),
     case session_utils:decode_auth_request(RegisterRequest) of
         {ok, {Login, Password}} ->
+            ?DEBUG("Client session ~p trying to register with login ~p and password ~p",[self(), Login, Password]),
             case ProfileBackend:register(Login, Password) of
                 {ok, Profile} ->
+                    ?DEBUG("Client session ~p successfully registered", [self()]),
                     EncodedProfile = session_utils:encode_profile_request(Profile),
                     Transport:send(
                         Socket,[
@@ -160,6 +165,7 @@ guest(
                     ),
                     {next_state, idle, State#state{ peer_name = Login}};
                 {error, already_registered} ->
+                    ?DEBUG("Client session ~p failed registration, login exists", [self()]),
                     Transport:send(
                         Socket,
                         session_utils:make_server_frame([?REGISTER_TAG, session_utils:encode_auth_response(false)])
@@ -167,6 +173,7 @@ guest(
                     {next_state, guest, State}
             end;
         _Error ->
+            ?DEBUG("Client session ~p could not decode register request", [self()]),
             {stop, protocol_violation, State}
     end;
 
@@ -178,6 +185,7 @@ guest(
         transport = Transport
     } = State
 ) ->
+    ?DEBUG("Client session ~p (guest) received top request (~p items)", [self(), TopRequest]),
     {ok, Top} = ProfileBackend:get_top(TopRequest),
     Transport:send(
         Socket,
@@ -194,15 +202,15 @@ idle(
         peer_name = PeerName
     } = State
 ) ->
-    lager:debug("Received START_GAME(NEW_GAME) packet from ~p in idle state", [PeerName]),
     {ok, GameToken} = game_lobby:checkin(self(), PeerName),
+    ?DEBUG("Client session ~p (~p) received request to start new game ~p", [self(), PeerName, GameToken]),
     {next_state, waiting_for_game, State#state{ game_token = GameToken }};
 
 idle(
     {command, ?START_GAME_PACKET(?RECONNECT_GAME_FLAG)},
-    #state{peer_name = PeerName} = State
+    #state{peer_name = _PeerName} = State
 ) ->
-    lager:debug("Received START_GAME(RECONNECT) packet from ~p in idle state", [PeerName]),
+    ?DEBUG("Client session ~p (~p) received request to reconnect existed game", [self(), _PeerName]),
     {next_state, waiting_for_game, State#state{ game_token = reconnecting }};
 
 idle( {command, _Command}, #state{peer_name = _PeerName} = State ) ->
@@ -217,24 +225,34 @@ idle(
         peer_name = PeerName
     } = State
 ) when ProfileBackend =/= undefined  ->
-    {ok, Profile} = session_utils:decode_profile_request(ProfileRequest),
-    {ok, UpdatedProfile} = ProfileBackend:update_profile(Profile, PeerName),
-    EncodedProfile = session_utils:encode_profile_request(UpdatedProfile),
-    ok = Transport:send(
-        Socket,[
-            session_utils:make_server_frame([?PROFILE_TAG, EncodedProfile])
-        ]
-    ),
-    {next_state, idle, State};
+    ?DEBUG("Client session ~p (~p) received request to update profile", [self(), PeerName]),
+    case session_utils:decode_profile_request(ProfileRequest) of
+        {ok, Profile} ->
+            ?DEBUG("Client session ~p (~p) successfully decoded profile ~p", [self(), PeerName, Profile]),
+            {ok, UpdatedProfile} = ProfileBackend:update_profile(Profile, PeerName),
+            EncodedProfile = session_utils:encode_profile_request(UpdatedProfile),
+            Transport:send(
+                Socket,[
+                    session_utils:make_server_frame([?PROFILE_TAG, EncodedProfile])
+                ]
+            ),
+            {next_state, idle, State};
+        {error, _Reason} ->
+            ?DEBUG("Client session ~p (~p) failed to decoded profile with reason ~p", [self(), PeerName, _Reason]),
+            {stop, protocol_violation, State}
+    end;
+
 
 idle(
     {data, <<?TOP_TAG, TopRequest>>},
     #state{
         profile_backend = ProfileBackend,
         socket = Socket,
-        transport = Transport
+        transport = Transport,
+        peer_name = _PeerName
     } = State
 ) when ProfileBackend =/= undefined ->
+    ?DEBUG("Client session ~p (~p) received top request (~p items)", [self(), _PeerName, TopRequest]),
     {ok, Top} = ProfileBackend:get_top(TopRequest),
     Transport:send(
         Socket,
@@ -250,10 +268,10 @@ waiting_for_game(
     {command, ?CANCEL_GAME_PACKET},
     #state{
         game_token = Token,
-        peer_name = PeerName
+        peer_name = _PeerName
     } = State
 ) when Token =/= reconnecting ->
-    lager:debug("Received CANCEL_GAME from ~p in waiting_for_game state", [PeerName]),
+    ?DEBUG("Client session ~p (~p) received request to cancel game ~p", [self(), _PeerName, Token]),
     {ok, _} = game_lobby:cancel(Token),
     {next_state, waiting_for_game, State};
 
@@ -266,42 +284,35 @@ waiting_for_game(
         peer_name = PeerName
     } = State
 ) ->
-    lager:debug("Received RECONNECTION_DATA ~p from ~p in waiting_for_game state", [ReconnectionData, PeerName]),
+    ?DEBUG("Client session ~p (~p) received reconnection token ~p", [self(), PeerName, ReconnectionData]),
     case (catch binary_to_term(ReconnectionData)) of
         {ClientToken, ClientTag} ->
             case game_lobby:checkin(self(), PeerName, ClientToken, ClientTag) of
                 {ok, ClientToken} ->
-                    lager:debug("Reconnecting to session ~p for ~p", [ClientToken, PeerName]),
+                    ?DEBUG("Client session ~p (~p) reconnected to game ~p", [self(), PeerName, ClientToken]),
                     {next_state, waiting_for_game, State#state{ game_token = ClientToken}};
                 {error, session_expired} ->
-                    lager:debug("Could not reconnect to expired session ~p for ~p", [ClientToken, PeerName]),
+                    ?DEBUG("Client session ~p (~p) failed to reconnect to game ~p, because of session expired", [self(), PeerName, ClientToken]),
                     SendFrame = [
                         ?START_GAME_PACKET(0),
                         session_utils:make_server_frame(ReconnectionData),
                         ?CANCEL_GAME_PACKET
                     ],
-                    case Transport:send(Socket, SendFrame) of
-                        ok ->
-                            {next_state, idle, #state{socket = Socket, transport = Transport, peer_name = PeerName}};
-                        _ ->
-                            {stop, normal, State}
-                    end;
-                _ ->
+                    Transport:send(Socket, SendFrame),
+                    {next_state, idle, #state{socket = Socket, transport = Transport, peer_name = PeerName}};
+                {error, Reason} ->
+                    ?DEBUG("Client session ~p (~p) failed to reconnect to game ~p, because of ~p", [self(), PeerName, ClientToken, Reason]),
                     {stop, reconnection_token_corrupted, State}
             end;
         _ ->
-            lager:error("Could not parse RECONNECTION_DATA ~p received from ~p", [ReconnectionData, PeerName]),
+            ?DEBUG("Client session ~p (~p) failed to decode reconnection token ~p", [self(), PeerName, ReconnectionData]),
             {stop, reconnection_token_corrupted, State}
     end;
 
 
 waiting_for_game(
-    UnexpectedMessage,
-    #state{
-        peer_name = PeerName
-    } = State
+    _, State
 ) ->
-    lager:error("Unexpected message ~p for ~p in waiting_for_game state", [UnexpectedMessage, PeerName]),
     {stop, protocol_violation, State}.
 
 
@@ -309,10 +320,10 @@ running_game(
     {command, ?CANCEL_GAME_PACKET},
     #state{
         game_token = Token,
-        peer_name = PeerName
+        peer_name = _PeerName
     } = State
 ) ->
-    lager:debug("Received CANCEL_GAME from ~p in running_game state", [PeerName]),
+    ?DEBUG("Client session ~p (~p) received request to cancel game ~p", [self(), _PeerName, Token]),
     {ok, _} = game_lobby:cancel(Token),
     {next_state, stopping_game, State};
 
@@ -325,43 +336,36 @@ running_game(
         is_ours_turn = true,
         is_surrender_claimed = IsSurrenderClaimed,
         peer_name = PeerName,
-        profile_backend = ProfileBackend
+        profile_backend = ProfileBackend,
+        game_token = _Token
     } = State
 ) ->
     ok = game_session:surrender(GameSession, ClientTag, Surrender),
     case IsSurrenderClaimed of
         true ->
-            lager:debug(
-                "Acknowledge for peer SURRENDER_PACKET ~p from ~p in running_game state (this peer wins)",
-                [Surrender, PeerName]
-            ),
+            ?DEBUG("Client session ~p (~p) acknowledged that remote peer surrendered in game ~p", [self(), PeerName, _Token]),
             case ProfileBackend of
                 undefined -> ok;
                 _ ->
                     {ok, _} = ProfileBackend:increase_field(<<"score">>, PeerName)
             end;
         false ->
-            lager:debug(
-                "Received SURRENDER_PACKET ~p from ~p in running_game state (this peer was surrendered)",
-                [Surrender, PeerName]
-            )
+            ?DEBUG("Client session ~p (~p) decided to surrendered in game ~p", [self(), PeerName, _Token])
     end,
     {next_state, stopping_game, State};
 
 running_game(
-    {command, TurnData},
+    {command, _TurnData},
     #state{
         game_session = GameSession,
         client_tag = ClientTag,
         is_ours_turn = true,
         is_surrender_claimed = true,
-        peer_name = PeerName
+        game_token = _Token,
+        peer_name = _PeerName
     } = State
 ) ->
-    lager:error(
-        "Received command ~p instead of SURRENDER_PACKET acknowledge from ~p in running_game state",
-        [TurnData, PeerName]
-    ),
+    ?DEBUG("Client session ~p (~p) makes turn ~p instead of surrendered acknowledge in game ~p", [self(), _PeerName, _TurnData, _Token]),
     ok = game_session:surrender(GameSession, ClientTag, ?SURRENDER_PACKET(0,0,0)),
     {stop, protocol_violation, State};
 
@@ -372,68 +376,38 @@ running_game(
         client_tag = ClientTag,
         is_ours_turn = true,
         is_surrender_claimed = false,
-        peer_name = PeerName
+        peer_name = _PeerName,
+        game_token = _Token
     } = State
 ) ->
-    lager:debug(
-        "Received TURN ~p from ~p in running_game state",
-        [TurnData, PeerName]
-    ),
+    ?DEBUG("Client session ~p (~p) makes turn ~p in game ~p", [self(), _PeerName, TurnData, _Token]),
     ok = game_session:make_turn(GameSession, ClientTag, TurnData),
     {next_state, running_game, State#state{ is_ours_turn = false }};
 
 running_game(
-    {command, Turn},
+    {command, _Turn},
     #state{
         game_session = _,
         client_tag = _,
         is_ours_turn = false,
-        peer_name = PeerName
+        peer_name = _PeerName,
+        game_token = _Token
     } = State
 ) ->
-    lager:error(
-        "Received unexpected TURN ~p from ~p in running_game (out of order)",
-        [Turn, PeerName]
-    ),
+    ?DEBUG("Client session ~p (~p) makes UNEXPECTED turn ~in game ~p", [self(), _PeerName, _Turn, _Token]),
     {stop, protocol_violation, State};
 
 running_game(
-    {data, UnexpectedData},
+    {data, _UnexpectedData},
     #state{
         game_session = _,
         client_tag = _,
-        is_ours_turn = false,
-        peer_name = PeerName
+        is_ours_turn = false
     } = State
 ) ->
-    lager:error(
-        "Received unexpected DATA ~p from ~p in running_game",
-        [UnexpectedData, PeerName]
-    ),
     {stop, protocol_violation, State}.
 
-stopping_game(
-    UnexpectedMessage,
-    #state{
-        peer_name = PeerName
-    } = State
-) ->
-    lager:error(
-        "Received unexpected command ~p from ~p in stopping_game",
-        [UnexpectedMessage, PeerName]
-    ),
-    {stop, protocol_violation, State};
-
-stopping_game(
-    {data, Data},
-    #state{
-        peer_name = PeerName
-    } = State
-) ->
-    lager:error(
-        "Received unexpected data ~p from ~p in stopping_game",
-        [Data, PeerName]
-    ),
+stopping_game( _UnexpectedMessage, State ) ->
     {stop, protocol_violation, State}.
 
 
@@ -449,7 +423,7 @@ handle_info(
     #state{
         transport = Transport,
         socket = Socket,
-        peer_name = PeerName
+        peer_name = _PeerName
     } = State
 ) ->
     TurnFlag = turn_flag(Turn),
@@ -459,17 +433,14 @@ handle_info(
     ],
     case Transport:send(Socket, SendFrame) of
         ok ->
-            lager:debug("Succeeded sent START_GAME(~p) to peer ~p",[TurnFlag, PeerName]),
+            ?DEBUG("Client session ~p (~p) successfully started game ~p", [self(), _PeerName, Token]),
             {next_state, running_game, State#state{
                 game_session = GameSession,
                 client_tag = ClientTag,
                 is_ours_turn = Turn
             }};
-        _ ->
-            lager:debug(
-                "Failed to send START_GAME(~p) to peer ~p, forcing game cancellation and closing session",
-                [TurnFlag, PeerName]
-            ),
+        _Error ->
+            ?DEBUG("Client session ~p (~p) failed to start game, because of socket error ~p", [self(), _PeerName, Token, _Error]),
             {ok, _} = game_lobby:cancel(Token),
             {stop, normal, State}
     end;
@@ -482,20 +453,14 @@ handle_info(
     #state{
         socket = Socket,
         transport = Transport,
-        peer_name = PeerName
-    } = State
+        peer_name = PeerName,
+        game_token = _Token
+    }
 ) when StateName =:= waiting_for_game; StateName =:= stopping_game; StateName =:= running_game ->
-    case Transport:send(Socket, ?CANCEL_GAME_PACKET) of
-        ok ->
-            lager:debug(
-                "Succeeded sent CANCEL_GAME to peer ~p, in ~p state",
-                [PeerName, StateName]
-            ),
-            {next_state, idle, #state{socket = Socket, transport = Transport, peer_name = PeerName}};
-        _ ->
-            lager:debug( "Failed to send CANCEL_GAME to peer ~p, closing session", [PeerName] ),
-            {stop, normal, State}
-    end;
+    ?DEBUG("Client session ~p (~p) finished game ~p in state ~p", [self(), PeerName, _Token, StateName]),
+    Transport:send(Socket, ?CANCEL_GAME_PACKET),
+    {next_state, idle, #state{socket = Socket, transport = Transport, peer_name = PeerName}};
+
 
 handle_info(
     #peer_turn{
@@ -506,20 +471,13 @@ handle_info(
         is_ours_turn = false,
         transport = Transport,
         socket = Socket,
-        peer_name = PeerName
+        peer_name = _PeerName,
+        game_token = _Token
     } = State
 ) ->
-    case Transport:send(Socket, TurnData) of
-        ok ->
-            lager:debug(
-                "Succeeded sent TURN ~p to peer ~p, in running_game state",
-                [TurnData, PeerName]
-            ),
-            {next_state, running_game, State#state{is_ours_turn = true}};
-        _ ->
-            lager:debug( "Failed to send TURN ~p to peer ~p, closing session", [TurnData, PeerName] ),
-            {stop, normal, State}
-    end;
+    ?DEBUG("Client session ~p (~p) received peer turn ~p in game ~p", [self(), _PeerName, TurnData, _Token]),
+    Transport:send(Socket, TurnData),
+    {next_state, running_game, State#state{is_ours_turn = true}};
 
 
 handle_info( #peer_turn{}, running_game, State ) ->
@@ -531,23 +489,13 @@ handle_info(
         is_ours_turn = false,
         socket = Socket,
         transport = Transport,
-        peer_name = PeerName
+        peer_name = _PeerName,
+        game_token = _Token
     } = State
 ) ->
-    case Transport:send(Socket, SurrenderData) of
-        ok ->
-            lager:debug(
-                "Succeeded sent SURRENDER_PACKET ~p to peer ~p, in running_game state (this peer claiming surrender)",
-                [SurrenderData, PeerName]
-            ),
-            {next_state, running_game, State#state{is_surrender_claimed = true, is_ours_turn = true}};
-        _ ->
-            lager:debug(
-                "Failed to send SURRENDER_PACKET ~p to peer ~p, in running_game state (this peer claiming surrender), closing session",
-                [SurrenderData, PeerName]
-            ),
-            {stop, normal, State}
-    end;
+    ?DEBUG("Client session ~p (~p) received peer surrender ~p in game ~p", [self(), _PeerName, SurrenderData, _Token]),
+    Transport:send(Socket, SurrenderData),
+    {next_state, running_game, State#state{is_surrender_claimed = true, is_ours_turn = true}};
 
 handle_info( #peer_surrender{}, running_game, State ) ->
     {next_state, internal_violation, State};
