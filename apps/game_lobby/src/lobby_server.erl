@@ -76,9 +76,10 @@ handle_call(
         waiting_client = undefined
     } = State
 ) ->
+    WaitingMonitor = monitor(process, ClientPid),
     Token = lobby_utils:random_token(),
     {reply, {ok, Token}, State#state{
-        waiting_client = {ClientPid, Token}
+        waiting_client = {ClientPid, Token, WaitingMonitor}
     }};
 
 
@@ -86,13 +87,13 @@ handle_call(
     {checkin, NewPid},
     _From,
     #state{
-        waiting_client = {WaitingPid, WaitingToken},
+        waiting_client = {WaitingPid, WaitingToken, WaitingMonitor},
         monitors_table = MonitorsTable
     } = State
 ) ->
     FirstTag = lobby_utils:random_token(),
     SecondTag = lobby_utils:random_token(),
-
+    demonitor(WaitingMonitor, [flush]),
     {ok, SessionPid} =
         supervisor:start_child(game_session_sup, [
             WaitingToken,
@@ -131,9 +132,10 @@ handle_call(
     {cancel, Token},
     _From,
     #state{
-        waiting_client = {WaitingClientPid, WaitingClientToken}
+        waiting_client = {WaitingClientPid, WaitingClientToken, WaitingMonitor}
     } = State
 ) when Token =:= WaitingClientToken ->
+    demonitor(WaitingMonitor, [flush]),
     WaitingClientPid ! #game_stop{ token = Token },
     {reply, {ok, Token}, State#state{waiting_client = undefined }};
 
@@ -161,6 +163,14 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Request, State) ->
     {noreply, State}.
 
+
+handle_info(
+    {'DOWN', MonitorRef, process, WaitingPid, _},
+    #state{
+        waiting_client = {WaitingPid, _WaitingToken, MonitorRef}
+    } = State
+) ->
+    {noreply, State#state{ waiting_client = undefined }};
 
 handle_info(
     {'DOWN', MonitorRef, process, _, _},
