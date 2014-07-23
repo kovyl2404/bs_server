@@ -5,7 +5,7 @@
 -behaviour(gen_server).
 
 -include_lib("game_lobby/include/common.hrl").
--include_lib("eunit/include/eunit.hrl").
+-include_lib("game_lobby/include/logging.hrl").
 
 %% API
 -export([
@@ -78,6 +78,7 @@ handle_call(
 ) ->
     WaitingMonitor = monitor(process, ClientPid),
     Token = lobby_utils:random_token(),
+    ?NOTICE("Used ~p waiting for game ~p",[ClientLabel, Token]),
     {reply, {ok, Token}, State#state{
         waiting_client = {ClientPid, Token, WaitingMonitor, ClientLabel}
     }};
@@ -91,6 +92,7 @@ handle_call(
         monitors_table = MonitorsTable
     } = State
 ) ->
+    ?NOTICE("Used ~p will play with ~p in game ~p",[ClientLabel, WaitingClientLabel]),
     FirstTag = lobby_utils:random_token(),
     SecondTag = lobby_utils:random_token(),
     demonitor(WaitingMonitor, [flush]),
@@ -100,6 +102,7 @@ handle_call(
             #peer_id{client_pid = WaitingPid, tag = FirstTag, client_label = WaitingClientLabel},
             #peer_id{client_pid = NewPid, tag = SecondTag, client_label = ClientLabel}
         ]),
+    ?INFO("Starting game session ~p for game ~p",[SessionPid, WaitingToken]),
     MonitorRef = monitor(process, SessionPid),
     true = ets:insert(?SERVER, {WaitingToken, SessionPid}),
     true = ets:insert(MonitorsTable, {MonitorRef, WaitingToken}),
@@ -116,8 +119,10 @@ handle_call(
 
     } = State
 ) ->
+    ?DEBUG("Client session ~p (~p) asked to reconnect game ~p",[ClientPid, ClientLabel, GameToken]),
     case ets:lookup(?SERVER, GameToken) of
         [{_, SessionPid}] ->
+            ?DEBUG("Game ~p still exists in game session ~p",[GameToken, SessionPid]),
             case game_session:set_peer(SessionPid, #peer_id{ client_pid = ClientPid, tag = PeerTag, client_label = ClientLabel}) of
                 ok ->
                     {reply, {ok, GameToken}, State};
@@ -125,6 +130,7 @@ handle_call(
                     {reply, Error, State}
             end;
         _ ->
+            ?DEBUG("Game ~p not found. Session expired.",[GameToken]),
             {reply, {error, session_expired }, State}
     end;
 
@@ -135,6 +141,7 @@ handle_call(
         waiting_client = {WaitingClientPid, WaitingClientToken, WaitingMonitor, _ClientLabel}
     } = State
 ) when Token =:= WaitingClientToken ->
+    ?DEBUG("Waiting client ~p (~p) asked to cancel game ~p",[WaitingClientPid, _ClientLabel, WaitingClientToken]),
     demonitor(WaitingMonitor, [flush]),
     WaitingClientPid ! #game_stop{ token = Token },
     {reply, {ok, Token}, State#state{waiting_client = undefined }};
@@ -146,12 +153,15 @@ handle_call(
 
     } = State
 ) ->
+    ?DEBUG("Client asked to cancel game ~p",[Token]),
     Reply =
         case ets:lookup(?SERVER, Token) of
             [{Token, SessionPid}] ->
+                ?DEBUG("Game ~p found in game session ~p",[Token, SessionPid]),
                 game_session:stop_game(SessionPid),
                 {ok, Token};
             _ ->
+                ?DEBUG("Game ~p not found. Session expired.",[Token]),
                 {error, session_expired}
         end,
     {reply, Reply, State};
@@ -165,11 +175,12 @@ handle_cast(_Request, State) ->
 
 
 handle_info(
-    {'DOWN', MonitorRef, process, WaitingPid, _},
+    {'DOWN', MonitorRef, process, WaitingPid, _Reason},
     #state{
         waiting_client = {WaitingPid, _WaitingToken, MonitorRef}
     } = State
 ) ->
+    ?DEBUG("Waiting client session ~p (~p) down with reason ~p.",[WaitingPid, _WaitingToken, _Reason]),
     {noreply, State#state{ waiting_client = undefined }};
 
 handle_info(

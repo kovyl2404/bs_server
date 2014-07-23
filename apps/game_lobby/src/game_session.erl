@@ -6,6 +6,7 @@
 
 -include_lib("game_lobby/include/common.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("game_lobby/include/logging.hrl").
 
 %% API
 -export([
@@ -33,7 +34,8 @@
         peer_tags                = [],
         peer_queue               = [],
         last_turn                = undefined,
-        is_surrender_negotiation = false
+        is_surrender_negotiation = false,
+        peer_labels              = []
     }
 ).
 
@@ -72,19 +74,23 @@ stop_game(SessionPid) ->
 
 init({
     Token,
-    #peer_id{client_pid = FirstPid, tag = FirstTag},
-    #peer_id{ client_pid = SecondPid, tag = SecondTag}
+    #peer_id{client_pid = FirstPid, tag = FirstTag, client_label = FirstLabel},
+    #peer_id{ client_pid = SecondPid, tag = SecondTag, client_label = SecondLabel}
 }) ->
     erlang:monitor(process, FirstPid),
     erlang:monitor(process, SecondPid),
     FirstPid ! #game_start{tag = FirstTag, session_pid = self(), token = Token, turn = true },
     SecondPid ! #game_start{ tag = SecondTag, session_pid = self(), token = Token, turn = false },
+    ?INFO("New game started for ~p and ~p",[FirstLabel, SecondLabel]),
     {ok, #state{
         game_token = Token,
         peer_tags = orddict:from_list([
             {FirstTag, FirstPid}, {SecondTag, SecondPid}
         ]),
         peer_queue = [ FirstTag, SecondTag ],
+        peer_labels = orddict:from_list([
+            {FirstTag, FirstLabel}, {SecondTag, FirstLabel}
+        ]),
         last_turn = undefined
     }}.
 
@@ -185,9 +191,13 @@ handle_cast(
     #state{
         peer_queue = [ CurrentPeerTag, NextPeerTag ],
         peer_tags = PeerTags,
-        is_surrender_negotiation = false
+        is_surrender_negotiation = false,
+        peer_labels = PeerLabels
     } = State
 ) ->
+    CurrentLabel = orddict:fetch(CurrentPeerTag, PeerLabels),
+    NextLabel = orddict:fetch(NextPeerTag, PeerLabels),
+    ?INFO("~p surrendered to ~p",[CurrentLabel, NextLabel]),
     NextPeerPid = orddict:fetch(NextPeerTag, PeerTags),
     TurnValue = #peer_surrender{session_pid = self(), data = SurrenderData},
     send_safe(NextPeerPid, TurnValue),
@@ -202,11 +212,15 @@ handle_cast(
     {surrender, CurrentPeerTag, _SurrenderData},
     #state{
         game_token = Token,
-        peer_queue = [ CurrentPeerTag, _NextPeerTag ],
+        peer_queue = [ CurrentPeerTag, NextPeerTag ],
         peer_tags = PeerTags,
-        is_surrender_negotiation = true
+        is_surrender_negotiation = true,
+        peer_labels = PeerLabels
     } = State
 ) ->
+    CurrentLabel = orddict:fetch(CurrentPeerTag, PeerLabels),
+    NextLabel = orddict:fetch(NextPeerTag, PeerLabels),
+    ?INFO("~p acknowledged its win to ~p",[CurrentLabel, NextLabel]),
     [ send_safe(P, #game_stop{ session_pid = self(), token = Token, tag = T }) || {T, P} <- PeerTags ],
     {stop, normal, State};
 

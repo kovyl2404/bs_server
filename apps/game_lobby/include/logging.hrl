@@ -7,7 +7,8 @@
 -define(DEBUG(Message, Args), ok).
 -endif.
 
--define(WARNING(Message, Args), lager:warning(Message, Args)).
--define(CRITICAL(Message, Args), lager:critical(Message, Args)).
+
+-define(INFO(Message, Args), lager:info(Message, Args)).
+-define(NOTICE(Message, Args), lager:notice(Message, Args)).
 
 -endif.

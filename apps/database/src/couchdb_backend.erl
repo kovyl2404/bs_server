@@ -3,6 +3,7 @@
 -author("Viacheslav V. Kovalev").
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("database/include/logging.hrl").
 
 
 %% API
@@ -44,6 +45,7 @@ init(Params) ->
             ensure_views(Db),
             {ok, Db};
         Error ->
+            ?CRITICAL("Could not operate with couchdb-server ~p, database ~p because of ~p",[Server, DbName, Error]),
             Error
     end.
 
@@ -93,10 +95,12 @@ ensure_views(Db) ->
         true ->
             ok;
         false ->
+            ?WARNING("Design document 'uses' not found in database, creating new one from ~p",[code:priv_dir(database)]),
             case couchbeam:save_doc(Db, DesignDoc) of
                 {ok, _} ->
+                    ?WARNING("Design document 'uses' successfully created",[]),
                     ok;
                 Error ->
-                    Error
+                    ?CRITICAL("Failed to create design document 'uses' because of ~p",[Error])
             end
     end.

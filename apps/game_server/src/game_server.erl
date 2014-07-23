@@ -4,6 +4,8 @@
 
 -behaviour(application).
 
+-include_lib("game_server/include/logging.hrl").
+
 -define(
     CLIENT_SESSION_DEPS,
     [
@@ -36,12 +38,21 @@ stop() ->
     ok = stop_deps().
 
 start(_StartType, _StartArgs) ->
-    {ok, _} =
+    TransportOptions = transport_options(),
+    StartResult =
         ranch:start_listener(
             ?MODULE, ?DEFAULT_ACCEPTORS_COUNT, ranch_tcp, transport_options(),
             client_connection, connection_options()
         ),
-    client_session_sup:start_link().
+    case StartResult of
+        {ok, _} ->
+            ?WARNING("New game server started with transport ~p",[TransportOptions]),
+            client_session_sup:start_link();
+        Error ->
+            ?CRITICAL("Could not start game server with transport ~p because of ~p",[TransportOptions, Error]),
+            Error
+    end.
+
 
 stop(_State) ->
     ok.

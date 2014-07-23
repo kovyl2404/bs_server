@@ -300,8 +300,8 @@ waiting_for_game(
                     ],
                     Transport:send(Socket, SendFrame),
                     {next_state, idle, #state{socket = Socket, transport = Transport, peer_name = PeerName}};
-                {error, Reason} ->
-                    ?DEBUG("Client session ~p (~p) failed to reconnect to game ~p, because of ~p", [self(), PeerName, ClientToken, Reason]),
+                {error, _Reason} ->
+                    ?DEBUG("Client session ~p (~p) failed to reconnect to game ~p, because of ~p", [self(), PeerName, ClientToken, _Reason]),
                     {stop, reconnection_token_corrupted, State}
             end;
         _ ->
