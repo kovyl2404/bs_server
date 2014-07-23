@@ -195,7 +195,7 @@ idle(
     } = State
 ) ->
     lager:debug("Received START_GAME(NEW_GAME) packet from ~p in idle state", [PeerName]),
-    {ok, GameToken} = game_lobby:checkin(self()),
+    {ok, GameToken} = game_lobby:checkin(self(), PeerName),
     {next_state, waiting_for_game, State#state{ game_token = GameToken }};
 
 idle(
@@ -205,8 +205,7 @@ idle(
     lager:debug("Received START_GAME(RECONNECT) packet from ~p in idle state", [PeerName]),
     {next_state, waiting_for_game, State#state{ game_token = reconnecting }};
 
-idle( {command, Command}, #state{peer_name = PeerName} = State ) ->
-    lager:debug("Received unexpected command ~p from ~p in idle state", [Command, PeerName]),
+idle( {command, _Command}, #state{peer_name = _PeerName} = State ) ->
     {stop, protocol_violation, State};
 
 idle(
@@ -270,7 +269,7 @@ waiting_for_game(
     lager:debug("Received RECONNECTION_DATA ~p from ~p in waiting_for_game state", [ReconnectionData, PeerName]),
     case (catch binary_to_term(ReconnectionData)) of
         {ClientToken, ClientTag} ->
-            case game_lobby:checkin(self(), ClientToken, ClientTag) of
+            case game_lobby:checkin(self(), PeerName, ClientToken, ClientTag) of
                 {ok, ClientToken} ->
                     lager:debug("Reconnecting to session ~p for ~p", [ClientToken, PeerName]),
                     {next_state, waiting_for_game, State#state{ game_token = ClientToken}};

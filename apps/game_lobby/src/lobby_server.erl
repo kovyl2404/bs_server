@@ -10,8 +10,8 @@
 %% API
 -export([
     start_link/0,
-    checkin/1,
-    checkin/3,
+    checkin/2,
+    checkin/4,
     cancel/1
 ]).
 
@@ -41,11 +41,11 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 
-checkin(ClientPid) ->
-    safe_call(?SERVER, {checkin, ClientPid}).
+checkin(ClientPid, ClientLabel) ->
+    safe_call(?SERVER, {checkin, {ClientPid, ClientLabel}}).
 
-checkin(ClientPid, GameToken, PeerTag) ->
-    safe_call(?SERVER, {checkin, ClientPid, GameToken, PeerTag}).
+checkin(ClientPid, ClientLabel, GameToken, PeerTag) ->
+    safe_call(?SERVER, {checkin, {ClientPid, ClientLabel}, GameToken, PeerTag}).
 
 cancel(GameToken) ->
     safe_call(?SERVER, {cancel, GameToken }).
@@ -70,7 +70,7 @@ init([]) ->
 
 
 handle_call(
-    {checkin, ClientPid},
+    {checkin, {ClientPid, ClientLabel}},
     _From,
     #state{
         waiting_client = undefined
@@ -79,15 +79,15 @@ handle_call(
     WaitingMonitor = monitor(process, ClientPid),
     Token = lobby_utils:random_token(),
     {reply, {ok, Token}, State#state{
-        waiting_client = {ClientPid, Token, WaitingMonitor}
+        waiting_client = {ClientPid, Token, WaitingMonitor, ClientLabel}
     }};
 
 
 handle_call(
-    {checkin, NewPid},
+    {checkin, {NewPid, ClientLabel}},
     _From,
     #state{
-        waiting_client = {WaitingPid, WaitingToken, WaitingMonitor},
+        waiting_client = {WaitingPid, WaitingToken, WaitingMonitor, WaitingClientLabel},
         monitors_table = MonitorsTable
     } = State
 ) ->
@@ -97,8 +97,8 @@ handle_call(
     {ok, SessionPid} =
         supervisor:start_child(game_session_sup, [
             WaitingToken,
-            #peer_id{client_pid = WaitingPid, tag = FirstTag},
-            #peer_id{client_pid = NewPid, tag = SecondTag}
+            #peer_id{client_pid = WaitingPid, tag = FirstTag, client_label = WaitingClientLabel},
+            #peer_id{client_pid = NewPid, tag = SecondTag, client_label = ClientLabel}
         ]),
     MonitorRef = monitor(process, SessionPid),
     true = ets:insert(?SERVER, {WaitingToken, SessionPid}),
@@ -110,7 +110,7 @@ handle_call(
 
 %% TODO: Consider to avoid server call. Use direct ets:lookup from client instead
 handle_call(
-    {checkin, ClientPid, GameToken, PeerTag},
+    {checkin, {ClientPid, ClientLabel}, GameToken, PeerTag},
     _From,
     #state{
 
@@ -118,7 +118,7 @@ handle_call(
 ) ->
     case ets:lookup(?SERVER, GameToken) of
         [{_, SessionPid}] ->
-            case game_session:set_peer(SessionPid, #peer_id{ client_pid = ClientPid, tag = PeerTag}) of
+            case game_session:set_peer(SessionPid, #peer_id{ client_pid = ClientPid, tag = PeerTag, client_label = ClientLabel}) of
                 ok ->
                     {reply, {ok, GameToken}, State};
                 {error, _Reason} = Error ->
@@ -132,7 +132,7 @@ handle_call(
     {cancel, Token},
     _From,
     #state{
-        waiting_client = {WaitingClientPid, WaitingClientToken, WaitingMonitor}
+        waiting_client = {WaitingClientPid, WaitingClientToken, WaitingMonitor, _ClientLabel}
     } = State
 ) when Token =:= WaitingClientToken ->
     demonitor(WaitingMonitor, [flush]),

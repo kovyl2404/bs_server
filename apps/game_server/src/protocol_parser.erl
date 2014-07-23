@@ -5,6 +5,8 @@
 
 -include_lib("game_server/include/client_protocol.hrl").
 
+-define(DATA_SIZE_LIMIT, 1024).
+
 -export([
     init/0,
     init/1,
@@ -52,6 +54,7 @@ feed(
         <<Command:CommandLength/binary-unit:8, Rest/binary>> ->
             case Command of
                 ?SERVER_PACKET(MessageLength) ->
+                    MessageLength >= ?DATA_SIZE_LIMIT andalso erlang:error(message_too_long),
                     feed(#read_data{bytes_needed = MessageLength, next_command_length = CommandLength}, Rest);
                 Command ->
                     {ok, NewState, Messages} = feed(#read_command{command_length = CommandLength}, Rest),

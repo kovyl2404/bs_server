@@ -45,7 +45,7 @@ application_start_stop_test_() ->
     }.
 
 checkin_while_lobby_down_test_() ->
-    LobbyReply = game_lobby:checkin(self()),
+    LobbyReply = game_lobby:checkin(self(), "red"),
     [
         ?_assertEqual({error, server_fault}, LobbyReply)
     ].
@@ -54,10 +54,10 @@ down_after_checkin_test_() ->
     fixture(
         fun(_) ->
             ClientPid = spawn( fun() -> receive stop -> ok end end ),
-            {ok, Token} = game_lobby:checkin(ClientPid),
+            {ok, Token} = game_lobby:checkin(ClientPid, "red"),
             ClientPid ! stop,
             timer:sleep(100),
-            {ok, NewToken} = game_lobby:checkin(self()),
+            {ok, NewToken} = game_lobby:checkin(self(), "red"),
 
             [
                 ?_assertNotEqual(Token, NewToken)
@@ -71,7 +71,7 @@ checkin_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    LobbyReply = game_lobby:checkin(self()),
+                    LobbyReply = game_lobby:checkin(self(), "red"),
                     TestHost ! {self(), LobbyReply}
                 end,
 
@@ -100,12 +100,12 @@ checkin_test_() ->
 cancel_before_game_started_test_() ->
     fixture(
         fun(_) ->
-            {ok, Token} = game_lobby:checkin(self()),
+            {ok, Token} = game_lobby:checkin(self(), "red"),
             {ok, Token} = game_lobby:cancel(Token),
             GameStop = lobby_utils:wait_game_stop(Token, 100),
 
-            CheckinResult1 = game_lobby:checkin(self()),
-            CheckinResult2 = game_lobby:checkin(self()),
+            CheckinResult1 = game_lobby:checkin(self(), "red"),
+            CheckinResult2 = game_lobby:checkin(self(), "blue"),
 
             GameStart1 = lobby_utils:wait_game_start(),
             GameStart2 = lobby_utils:wait_game_start(),
@@ -129,7 +129,7 @@ cancel_after_game_started_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    {ok, Token} = game_lobby:checkin(self()),
+                    {ok, Token} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{token = Token, session_pid = SessionPid, tag = Tag}}
                         = lobby_utils:wait_game_start(),
                     game_lobby:cancel(Token),
@@ -137,7 +137,7 @@ cancel_after_game_started_test_() ->
                     TestHost ! {self(), GameStopResult}
                 end,
 
-            {ok, Token} = game_lobby:checkin(self()),
+            {ok, Token} = game_lobby:checkin(self(), "blue"),
             PeerPid = spawn( ClientFun ),
 
             {ok, #game_start{tag = Tag, session_pid = SessionPid, token = Token}}
@@ -168,7 +168,7 @@ game_start_after_checkin_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    {ok, Token} = game_lobby:checkin(self()),
+                    {ok, Token} = game_lobby:checkin(self(), self()),
                     GameStart =
                         case lobby_utils:wait_game_start(Token, 100) of
                             {ok, #game_start{token = Token, session_pid = SessionPid}} ->
@@ -199,7 +199,7 @@ reconnect_to_game_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    {ok, Token} = game_lobby:checkin(self()),
+                    {ok, Token} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{
                         token = Token,
                         tag = Tag,
@@ -209,14 +209,14 @@ reconnect_to_game_test_() ->
                 end,
             ClientPid = spawn(ClientFun),
 
-            {ok, Token} = game_lobby:checkin(self()),
+            {ok, Token} = game_lobby:checkin(self(), "blue"),
             {ok, #game_start{
                 session_pid = ActualSessionPid
             }} = lobby_utils:wait_game_start(Token, 100),
             {ok, #peer_lost{}} = lobby_utils:wait_peer_lost(ActualSessionPid, 100),
             {ok, {Token, TheirTag, ActualSessionPid}} = lobby_utils:wait_from_pid(ClientPid, 100),
 
-            ReconnectResult = game_lobby:checkin(self(), Token, TheirTag),
+            ReconnectResult = game_lobby:checkin(self(), "red", Token, TheirTag),
             GameStartResult = lobby_utils:wait_game_start(Token, 100),
             PeerResetResult = lobby_utils:wait_peer_reset(ActualSessionPid, 100),
 
@@ -238,7 +238,7 @@ reconnect_to_expired_game_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    {ok, Token} = game_lobby:checkin(self()),
+                    {ok, Token} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{
                         token = Token,
                         tag = Tag,
@@ -248,7 +248,7 @@ reconnect_to_expired_game_test_() ->
                 end,
             ClientPid = spawn(ClientFun),
 
-            {ok, Token} = game_lobby:checkin(self()),
+            {ok, Token} = game_lobby:checkin(self(), "blue"),
             {ok, #game_start{
                 session_pid = ActualSessionPid
             }} = lobby_utils:wait_game_start(Token, 100),
@@ -258,7 +258,7 @@ reconnect_to_expired_game_test_() ->
             MonitorRef = monitor(process, ActualSessionPid),
             ok = lobby_utils:wait_process_down(MonitorRef, 2500),
 
-            ReconnectResult = game_lobby:checkin(self(), Token, TheirTag),
+            ReconnectResult = game_lobby:checkin(self(), "red", Token, TheirTag),
             GameStartResult = lobby_utils:wait_game_start(Token, 100),
             PeerResetResult = lobby_utils:wait_peer_reset(ActualSessionPid, 100),
 

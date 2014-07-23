@@ -6,8 +6,8 @@
 
 %% Interface functions
 -export([
-    checkin/1,
-    checkin/3,
+    checkin/2,
+    checkin/4,
     cancel/1
 ]).
 
@@ -27,11 +27,11 @@
 %% Interface functions
 %% ===================================================================
 
-checkin(ClientPid) ->
-    lobby_server:checkin(ClientPid).
+checkin(ClientPid, ClientLabel) ->
+    lobby_server:checkin(ClientPid, ClientLabel).
 
-checkin(ClientPid, SessionToken, SessionTag) ->
-    lobby_server:checkin(ClientPid, SessionToken, SessionTag).
+checkin(ClientPid, ClientLabel, SessionToken, SessionTag) ->
+    lobby_server:checkin(ClientPid, ClientLabel, SessionToken, SessionTag).
 
 
 cancel(Token) ->

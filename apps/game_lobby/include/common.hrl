@@ -6,7 +6,8 @@
 -record(
     peer_id, {
         client_pid,
-        tag
+        tag,
+        client_label
     }
 ).
 

@@ -30,536 +30,536 @@ flush_messages() ->
     end.
 
 
-before_test() ->
-    error_logger:tty(false).
-
-start_game_no_auth_test_() ->
-    fixture(
-        fun(_) ->
-            ok = application:set_env(game_server, profile, database),
-            TestHost = self(),
-
-            ok = meck:expect(
-                mock_session_writer, send,
-                fun(_Socket, Data) ->
-                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
-                    TestHost ! {self(), ParseResult},
-                    ok
-                end
-            ),
-
-            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
-            MonitorRef = monitor(process, RemoteClientPid),
-            ok = client_session:send_command(RemoteClientPid, {command, ?START_GAME_PACKET(0)}),
-
-            SessionDown = lobby_utils:wait_process_down_reason(MonitorRef, 1000),
-
-            [
-                ?_assertEqual({ok, not_auth}, SessionDown)
-            ]
-
-        end
-    ).
-
-register_test_() ->
-    Profile = [
-        {<<"rank">>, 1},
-        {<<"experience">>, 2},
-        {<<"reserved1">>, 1},
-        {<<"reserved2">>, 2},
-        {<<"reserved3">>, 3},
-        {<<"reserved4">>, 5},
-        {<<"reserved5">>, 5},
-        {<<"reserved6">>, 6},
-        {<<"reserved7">>, 7},
-        {<<"score">>, 100},
-        {<<"achievements">>, [1,2,3,4,5,6,7,8]}
-    ],
-    fixture(
-        fun(_) ->
-            TestHost = self(),
-            ok = application:set_env(game_server, profile, database),
-
-            ok = meck:expect(
-                mock_session_writer, send,
-                fun(_Socket, Data) ->
-                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
-                    TestHost ! {self(), ParseResult},
-                    ok
-                end
-            ),
-            ok = meck:new(database),
-            ok =
-                meck:expect(
-                    database, register,
-                    fun(Login, Password) ->
-                        TestHost ! {self(), {register, Login, Password}},
-                        {ok, Profile}
-                    end
-                ),
-
-            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
-            MonitorRef = monitor(process, RemoteClientPid),
-            RegisterRequest = iolist_to_binary([ <<?REGISTER_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
-            ok = client_session:send_command(
-                RemoteClientPid, {data, RegisterRequest}
-            ),
-
-            SessionDown = lobby_utils:wait_process_down(MonitorRef, 100),
-            RegisterInDatabase = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-            RegisterOkResponse = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-
-            ok = meck:unload(database),
-
-            EncodedProfile = session_utils:encode_profile_request(Profile),
-            ExpectedProfileFrame = <<?PROFILE_TAG, EncodedProfile/binary>>,
-
-            [
-                ?_assertEqual({error, timeout}, SessionDown),
-                ?_assertEqual({ok, {register, <<"login">>, <<"password">>}}, RegisterInDatabase),
-                ?_assertEqual({ok, [
-                    {data, <<?REGISTER_TAG, 1>>}, {data, ExpectedProfileFrame}
-                ]}, RegisterOkResponse)
-            ]
-
-        end
-    ).
-
-invalid_register_test_() ->
-    fixture(
-        fun(_) ->
-            TestHost = self(),
-            ok = application:set_env(game_server, profile, database),
-
-            ok = meck:expect(
-                mock_session_writer, send,
-                fun(_Socket, Data) ->
-                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
-                    TestHost ! {self(), ParseResult},
-                    ok
-                end
-            ),
-            ok = meck:new(database),
-            ok =
-                meck:expect(
-                    database, register,
-                    fun(Login, Password) ->
-                        TestHost ! {self(), {register, Login, Password}},
-                        {error, already_registered}
-                    end
-                ),
-
-            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
-            MonitorRef = monitor(process, RemoteClientPid),
-            RegisterRequest = iolist_to_binary([ <<?REGISTER_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
-            ok = client_session:send_command(
-                RemoteClientPid, {data, RegisterRequest}
-            ),
-
-            SessionAlive = lobby_utils:wait_process_down(MonitorRef, 100),
-            RegisterInDatabase = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-            RegisterOkResponse = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-
-            ok = client_session:send_command(RemoteClientPid, {command, ?START_GAME_PACKET(0)}),
-            SessionDown = lobby_utils:wait_process_down_reason(MonitorRef, 1000),
-            ok = meck:unload(database),
-            [
-                ?_assertEqual({error, timeout}, SessionAlive),
-                ?_assertEqual({ok, {register, <<"login">>, <<"password">>}}, RegisterInDatabase),
-                ?_assertEqual({ok, [{data, <<?REGISTER_TAG, 0>>}]}, RegisterOkResponse),
-                ?_assertEqual({ok, not_auth}, SessionDown)
-            ]
-
-        end
-    ).
-
-register_in_idle_state_test_() ->
-    fixture(
-        fun(_) ->
-            TestHost = self(),
-            ok = application:set_env(game_server, profile, undefined),
-
-            ok = meck:expect(
-                mock_session_writer, send,
-                fun(_Socket, Data) ->
-                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
-                    TestHost ! {self(), ParseResult},
-                    ok
-                end
-            ),
-
-
-            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
-            MonitorRef = monitor(process, RemoteClientPid),
-            RegisterRequest = iolist_to_binary([ <<?REGISTER_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
-            ok = client_session:send_command(
-                RemoteClientPid, {data, RegisterRequest}
-            ),
-
-            SessionDown = lobby_utils:wait_process_down_reason(MonitorRef, 100),
-
-            [
-                ?_assertEqual({ok, protocol_violation}, SessionDown)
-            ]
-
-        end
-    ).
-
-request_top_test_() ->
-    Top = [
-        {10, <<"user1">>},
-        {5, <<"user2">>},
-        {3, <<"user5">>},
-        {2, <<"user3">>},
-        {1, <<"user4">>}
-    ],
-    fixture(
-        fun(_) ->
-            TestHost = self(),
-            ok = application:set_env(game_server, profile, database),
-
-            ok = meck:expect(
-                mock_session_writer, send,
-                fun(_Socket, Data) ->
-                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
-                    TestHost ! {self(), ParseResult},
-                    ok
-                end
-            ),
-            ok = meck:new(database),
-            ok =
-                meck:expect(
-                    database, get_top,
-                    fun(Count) ->
-                        TestHost ! {self(), {get_top, Count}},
-                        {ok, Top}
-                    end
-                ),
-            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
-
-            TopRequest = iolist_to_binary(<<?TOP_TAG, 5>>),
-            ok = client_session:send_command( RemoteClientPid, {data, TopRequest} ),
-
-            GetTop = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-            ok = meck:unload(database),
-            Res = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-            ExpectedTopData = iolist_to_binary(session_utils:encode_top_response(Top)),
-            [
-                ?_assertEqual({ok, {get_top, 5}}, GetTop),
-                ?_assertEqual({ok, [{data, <<?TOP_TAG, ExpectedTopData/binary>>}]}, Res)
-            ]
-        end
-    ).
-
-request_top_few_data_test_() ->
-    Top = [
-        {10, <<"user1">>},
-        {5, <<"user2">>},
-        {3, <<"user5">>},
-        {2, <<"user3">>},
-        {1, <<"user4">>}
-    ],
-    fixture(
-        fun(_) ->
-            TestHost = self(),
-            ok = application:set_env(game_server, profile, database),
-
-            ok = meck:expect(
-                mock_session_writer, send,
-                fun(_Socket, Data) ->
-                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
-                    TestHost ! {self(), ParseResult},
-                    ok
-                end
-            ),
-            ok = meck:new(database),
-            ok =
-                meck:expect(
-                    database, get_top,
-                    fun(Count) ->
-                        TestHost ! {self(), {get_top, Count}},
-                        {ok, Top}
-                    end
-                ),
-            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
-
-            TopRequest = iolist_to_binary(<<?TOP_TAG, 10>>),
-            ok = client_session:send_command( RemoteClientPid, {data, TopRequest} ),
-
-            GetTop = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-            ok = meck:unload(database),
-            Res = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-            ExpectedTopData = iolist_to_binary(session_utils:encode_top_response(Top)),
-            [
-                ?_assertEqual({ok, {get_top, 10}}, GetTop),
-                ?_assertEqual({ok, [{data, <<?TOP_TAG, ExpectedTopData/binary>>}]}, Res)
-            ]
-        end
-    ).
-
-login_test_() ->
-    Profile = [
-        {<<"rank">>, 1},
-        {<<"experience">>, 2},
-        {<<"reserved1">>, 1},
-        {<<"reserved2">>, 2},
-        {<<"reserved3">>, 3},
-        {<<"reserved4">>, 5},
-        {<<"reserved5">>, 5},
-        {<<"reserved6">>, 6},
-        {<<"reserved7">>, 7},
-        {<<"score">>, 100},
-        {<<"achievements">>, [1,2,3,4,5,6,7,8]}
-    ],
-    fixture(
-        fun(_) ->
-            TestHost = self(),
-            ok = application:set_env(game_server, profile, database),
-
-            ok = meck:expect(
-                mock_session_writer, send,
-                fun(_Socket, Data) ->
-                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
-                    TestHost ! {self(), ParseResult},
-                    ok
-                end
-            ),
-            ok = meck:new(database),
-            ok =
-                meck:expect(
-                    database, login,
-                    fun(Login, Password) ->
-                        TestHost ! {self(), {login, Login, Password}},
-                        {ok, Profile}
-                    end
-                ),
-
-            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
-            MonitorRef = monitor(process, RemoteClientPid),
-            RegisterRequest = iolist_to_binary([ <<?LOGIN_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
-            ok = client_session:send_command(
-                RemoteClientPid, {data, RegisterRequest}
-            ),
-
-            SessionDown = lobby_utils:wait_process_down(MonitorRef, 100),
-            RegisterInDatabase = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-            RegisterOkResponse = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-
-            EncodedProfile = session_utils:encode_profile_request(Profile),
-            ExpectedProfileFrame = <<?PROFILE_TAG, EncodedProfile/binary>>,
-            ok = meck:unload(database),
-
-            [
-                ?_assertEqual({error, timeout}, SessionDown),
-                ?_assertEqual({ok, {login, <<"login">>, <<"password">>}}, RegisterInDatabase),
-                ?_assertEqual({ok, [
-                    {data, <<?LOGIN_TAG, 1>>}, {data, ExpectedProfileFrame}
-                ]}, RegisterOkResponse)
-            ]
-
-        end
-    ).
-
-update_profile_not_auth_test_() ->
-    Profile = [
-        {<<"rank">>, 1},
-        {<<"experience">>, 2},
-        {<<"reserved1">>, 1},
-        {<<"reserved2">>, 2},
-        {<<"reserved3">>, 3},
-        {<<"reserved4">>, 5},
-        {<<"reserved5">>, 5},
-        {<<"reserved6">>, 6},
-        {<<"reserved7">>, 7},
-        {<<"score">>, 100},
-        {<<"achievements">>, [1,2,3,4,5,6,7,8]}
-    ],
-    fixture(
-        fun(_) ->
-            ok = application:set_env(game_server, profile, database),
-            TestHost = self(),
-
-            ok = meck:expect(
-                mock_session_writer, send,
-                fun(_Socket, Data) ->
-                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
-                    TestHost ! {self(), ParseResult},
-                    ok
-                end
-            ),
-
-            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
-            MonitorRef = monitor(process, RemoteClientPid),
-            ProfileRequest = session_utils:make_server_frame(
-                [?PROFILE_TAG, session_utils:encode_profile_request(Profile)]
-            ),
-            ok = client_session:send_command(
-                RemoteClientPid, {data, ProfileRequest}
-            ),
-
-            SessionDown = lobby_utils:wait_process_down_reason(MonitorRef, 1000),
-
-            [
-                ?_assertEqual({ok, not_auth}, SessionDown)
-            ]
-
-        end
-    ).
-
-update_profile_test_() ->
-    Profile = [
-        {<<"rank">>, 1},
-        {<<"experience">>, 2},
-        {<<"reserved1">>, 1},
-        {<<"reserved2">>, 2},
-        {<<"reserved3">>, 3},
-        {<<"reserved4">>, 5},
-        {<<"reserved5">>, 5},
-        {<<"reserved6">>, 6},
-        {<<"reserved7">>, 7},
-        {<<"score">>, 100},
-        {<<"achievements">>, [1,2,3,4,5,6,7,8]}
-    ],
-    fixture(
-        fun(_) ->
-            ok = application:set_env(game_server, profile, database),
-            TestHost = self(),
-
-            ok = meck:expect(
-                mock_session_writer, send,
-                fun(_Socket, Data) ->
-                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
-                    TestHost ! {self(), ParseResult},
-                    ok
-                end
-            ),
-            ok = meck:new(database),
-            ok =
-                meck:expect(
-                    database, login,
-                    fun(Login, Password) ->
-                        TestHost ! {self(), {login, Login, Password}},
-                        {ok, Profile}
-                    end
-                ),
-
-            ok = meck:expect(
-                database, update_profile,
-                fun(UpdatedProfile, Login) ->
-                    TestHost ! {self(), {update_profile, Login, UpdatedProfile}},
-                    {ok, UpdatedProfile}
-                end
-            ),
-
-            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
-            MonitorRef = monitor(process, RemoteClientPid),
-
-            LoginRequest = iolist_to_binary([ <<?LOGIN_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
-            ok = client_session:send_command( RemoteClientPid, {data, LoginRequest} ),
-            {ok, {login, <<"login">>, <<"password">>}} =
-                lobby_utils:wait_from_pid(RemoteClientPid, 100),
-            {ok, _} = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-
-
-            ProfileRequest = [?PROFILE_TAG, session_utils:encode_profile_request(Profile)],
-
-            ok = client_session:send_command( RemoteClientPid, {data, iolist_to_binary(ProfileRequest)} ),
-            UpdateProfile = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-            ProfileResponse = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-
-            ok = meck:unload(database),
-
-            SessionDown = lobby_utils:wait_process_down(MonitorRef, 100),
-
-            [
-                ?_assertMatch({ok, {update_profile, <<"login">>, _}}, UpdateProfile),
-                ?_assertMatch({ok, [{data, _}]}, ProfileResponse),
-                ?_assertEqual({error, timeout}, SessionDown)
-            ]
-
-        end
-    ).
-
-
-invalid_login_test_() ->
-    fixture(
-        fun(_) ->
-            TestHost = self(),
-            ok = application:set_env(game_server, profile, database),
-
-            ok = meck:expect(
-                mock_session_writer, send,
-                fun(_Socket, Data) ->
-                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
-                    TestHost ! {self(), ParseResult},
-                    ok
-                end
-            ),
-            ok = meck:new(database),
-            ok =
-                meck:expect(
-                    database, login,
-                    fun(Login, Password) ->
-                        TestHost ! {self(), {login, Login, Password}},
-                        {error, not_found}
-                    end
-                ),
-
-            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
-            MonitorRef = monitor(process, RemoteClientPid),
-            RegisterRequest = iolist_to_binary([ <<?LOGIN_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
-            ok = client_session:send_command(
-                RemoteClientPid, {data, RegisterRequest}
-            ),
-
-            SessionAlive = lobby_utils:wait_process_down(MonitorRef, 100),
-            RegisterInDatabase = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-            RegisterOkResponse = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-
-            ok = client_session:send_command(RemoteClientPid, {command, ?START_GAME_PACKET(0)}),
-            SessionDown = lobby_utils:wait_process_down_reason(MonitorRef, 1000),
-            ok = meck:unload(database),
-            [
-                ?_assertEqual({error, timeout}, SessionAlive),
-                ?_assertEqual({ok, {login, <<"login">>, <<"password">>}}, RegisterInDatabase),
-                ?_assertEqual({ok, [{data, <<?LOGIN_TAG, 0>>}]}, RegisterOkResponse),
-                ?_assertEqual({ok, not_auth}, SessionDown)
-            ]
-
-        end
-    ).
-
-login_in_idle_state_test_() ->
-    fixture(
-        fun(_) ->
-            TestHost = self(),
-            ok = application:set_env(game_server, profile, undefined),
-
-            ok = meck:expect(
-                mock_session_writer, send,
-                fun(_Socket, Data) ->
-                    ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
-                    TestHost ! {self(), ParseResult},
-                    ok
-                end
-            ),
-
-
-            {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
-            MonitorRef = monitor(process, RemoteClientPid),
-            RegisterRequest = iolist_to_binary([ <<?LOGIN_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
-            ok = client_session:send_command(
-                RemoteClientPid, {data, RegisterRequest}
-            ),
-
-            SessionDown = lobby_utils:wait_process_down_reason(MonitorRef, 100),
-
-            [
-                ?_assertEqual({ok, protocol_violation}, SessionDown)
-            ]
-
-        end
-    ).
+%% before_test() ->
+%%     error_logger:tty(false).
+
+%% start_game_no_auth_test_() ->
+%%     fixture(
+%%         fun(_) ->
+%%             ok = application:set_env(game_server, profile, database),
+%%             TestHost = self(),
+%%
+%%             ok = meck:expect(
+%%                 mock_session_writer, send,
+%%                 fun(_Socket, Data) ->
+%%                     ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+%%                     TestHost ! {self(), ParseResult},
+%%                     ok
+%%                 end
+%%             ),
+%%
+%%             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+%%             MonitorRef = monitor(process, RemoteClientPid),
+%%             ok = client_session:send_command(RemoteClientPid, {command, ?START_GAME_PACKET(0)}),
+%%
+%%             SessionDown = lobby_utils:wait_process_down_reason(MonitorRef, 1000),
+%%
+%%             [
+%%                 ?_assertEqual({ok, not_auth}, SessionDown)
+%%             ]
+%%
+%%         end
+%%     ).
+%%
+%% register_test_() ->
+%%     Profile = [
+%%         {<<"rank">>, 1},
+%%         {<<"experience">>, 2},
+%%         {<<"reserved1">>, 1},
+%%         {<<"reserved2">>, 2},
+%%         {<<"reserved3">>, 3},
+%%         {<<"reserved4">>, 5},
+%%         {<<"reserved5">>, 5},
+%%         {<<"reserved6">>, 6},
+%%         {<<"reserved7">>, 7},
+%%         {<<"score">>, 100},
+%%         {<<"achievements">>, [1,2,3,4,5,6,7,8]}
+%%     ],
+%%     fixture(
+%%         fun(_) ->
+%%             TestHost = self(),
+%%             ok = application:set_env(game_server, profile, database),
+%%
+%%             ok = meck:expect(
+%%                 mock_session_writer, send,
+%%                 fun(_Socket, Data) ->
+%%                     ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+%%                     TestHost ! {self(), ParseResult},
+%%                     ok
+%%                 end
+%%             ),
+%%             ok = meck:new(database),
+%%             ok =
+%%                 meck:expect(
+%%                     database, register,
+%%                     fun(Login, Password) ->
+%%                         TestHost ! {self(), {register, Login, Password}},
+%%                         {ok, Profile}
+%%                     end
+%%                 ),
+%%
+%%             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+%%             MonitorRef = monitor(process, RemoteClientPid),
+%%             RegisterRequest = iolist_to_binary([ <<?REGISTER_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
+%%             ok = client_session:send_command(
+%%                 RemoteClientPid, {data, RegisterRequest}
+%%             ),
+%%
+%%             SessionDown = lobby_utils:wait_process_down(MonitorRef, 100),
+%%             RegisterInDatabase = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%             RegisterOkResponse = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%
+%%             ok = meck:unload(database),
+%%
+%%             EncodedProfile = session_utils:encode_profile_request(Profile),
+%%             ExpectedProfileFrame = <<?PROFILE_TAG, EncodedProfile/binary>>,
+%%
+%%             [
+%%                 ?_assertEqual({error, timeout}, SessionDown),
+%%                 ?_assertEqual({ok, {register, <<"login">>, <<"password">>}}, RegisterInDatabase),
+%%                 ?_assertEqual({ok, [
+%%                     {data, <<?REGISTER_TAG, 1>>}, {data, ExpectedProfileFrame}
+%%                 ]}, RegisterOkResponse)
+%%             ]
+%%
+%%         end
+%%     ).
+%%
+%% invalid_register_test_() ->
+%%     fixture(
+%%         fun(_) ->
+%%             TestHost = self(),
+%%             ok = application:set_env(game_server, profile, database),
+%%
+%%             ok = meck:expect(
+%%                 mock_session_writer, send,
+%%                 fun(_Socket, Data) ->
+%%                     ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+%%                     TestHost ! {self(), ParseResult},
+%%                     ok
+%%                 end
+%%             ),
+%%             ok = meck:new(database),
+%%             ok =
+%%                 meck:expect(
+%%                     database, register,
+%%                     fun(Login, Password) ->
+%%                         TestHost ! {self(), {register, Login, Password}},
+%%                         {error, already_registered}
+%%                     end
+%%                 ),
+%%
+%%             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+%%             MonitorRef = monitor(process, RemoteClientPid),
+%%             RegisterRequest = iolist_to_binary([ <<?REGISTER_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
+%%             ok = client_session:send_command(
+%%                 RemoteClientPid, {data, RegisterRequest}
+%%             ),
+%%
+%%             SessionAlive = lobby_utils:wait_process_down(MonitorRef, 100),
+%%             RegisterInDatabase = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%             RegisterOkResponse = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%
+%%             ok = client_session:send_command(RemoteClientPid, {command, ?START_GAME_PACKET(0)}),
+%%             SessionDown = lobby_utils:wait_process_down_reason(MonitorRef, 1000),
+%%             ok = meck:unload(database),
+%%             [
+%%                 ?_assertEqual({error, timeout}, SessionAlive),
+%%                 ?_assertEqual({ok, {register, <<"login">>, <<"password">>}}, RegisterInDatabase),
+%%                 ?_assertEqual({ok, [{data, <<?REGISTER_TAG, 0>>}]}, RegisterOkResponse),
+%%                 ?_assertEqual({ok, not_auth}, SessionDown)
+%%             ]
+%%
+%%         end
+%%     ).
+%%
+%% register_in_idle_state_test_() ->
+%%     fixture(
+%%         fun(_) ->
+%%             TestHost = self(),
+%%             ok = application:set_env(game_server, profile, undefined),
+%%
+%%             ok = meck:expect(
+%%                 mock_session_writer, send,
+%%                 fun(_Socket, Data) ->
+%%                     ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+%%                     TestHost ! {self(), ParseResult},
+%%                     ok
+%%                 end
+%%             ),
+%%
+%%
+%%             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+%%             MonitorRef = monitor(process, RemoteClientPid),
+%%             RegisterRequest = iolist_to_binary([ <<?REGISTER_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
+%%             ok = client_session:send_command(
+%%                 RemoteClientPid, {data, RegisterRequest}
+%%             ),
+%%
+%%             SessionDown = lobby_utils:wait_process_down_reason(MonitorRef, 100),
+%%
+%%             [
+%%                 ?_assertEqual({ok, protocol_violation}, SessionDown)
+%%             ]
+%%
+%%         end
+%%     ).
+%%
+%% request_top_test_() ->
+%%     Top = [
+%%         {10, <<"user1">>},
+%%         {5, <<"user2">>},
+%%         {3, <<"user5">>},
+%%         {2, <<"user3">>},
+%%         {1, <<"user4">>}
+%%     ],
+%%     fixture(
+%%         fun(_) ->
+%%             TestHost = self(),
+%%             ok = application:set_env(game_server, profile, database),
+%%
+%%             ok = meck:expect(
+%%                 mock_session_writer, send,
+%%                 fun(_Socket, Data) ->
+%%                     ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+%%                     TestHost ! {self(), ParseResult},
+%%                     ok
+%%                 end
+%%             ),
+%%             ok = meck:new(database),
+%%             ok =
+%%                 meck:expect(
+%%                     database, get_top,
+%%                     fun(Count) ->
+%%                         TestHost ! {self(), {get_top, Count}},
+%%                         {ok, Top}
+%%                     end
+%%                 ),
+%%             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+%%
+%%             TopRequest = iolist_to_binary(<<?TOP_TAG, 5>>),
+%%             ok = client_session:send_command( RemoteClientPid, {data, TopRequest} ),
+%%
+%%             GetTop = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%             ok = meck:unload(database),
+%%             Res = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%             ExpectedTopData = iolist_to_binary(session_utils:encode_top_response(Top)),
+%%             [
+%%                 ?_assertEqual({ok, {get_top, 5}}, GetTop),
+%%                 ?_assertEqual({ok, [{data, <<?TOP_TAG, ExpectedTopData/binary>>}]}, Res)
+%%             ]
+%%         end
+%%     ).
+%%
+%% request_top_few_data_test_() ->
+%%     Top = [
+%%         {10, <<"user1">>},
+%%         {5, <<"user2">>},
+%%         {3, <<"user5">>},
+%%         {2, <<"user3">>},
+%%         {1, <<"user4">>}
+%%     ],
+%%     fixture(
+%%         fun(_) ->
+%%             TestHost = self(),
+%%             ok = application:set_env(game_server, profile, database),
+%%
+%%             ok = meck:expect(
+%%                 mock_session_writer, send,
+%%                 fun(_Socket, Data) ->
+%%                     ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+%%                     TestHost ! {self(), ParseResult},
+%%                     ok
+%%                 end
+%%             ),
+%%             ok = meck:new(database),
+%%             ok =
+%%                 meck:expect(
+%%                     database, get_top,
+%%                     fun(Count) ->
+%%                         TestHost ! {self(), {get_top, Count}},
+%%                         {ok, Top}
+%%                     end
+%%                 ),
+%%             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+%%
+%%             TopRequest = iolist_to_binary(<<?TOP_TAG, 10>>),
+%%             ok = client_session:send_command( RemoteClientPid, {data, TopRequest} ),
+%%
+%%             GetTop = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%             ok = meck:unload(database),
+%%             Res = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%             ExpectedTopData = iolist_to_binary(session_utils:encode_top_response(Top)),
+%%             [
+%%                 ?_assertEqual({ok, {get_top, 10}}, GetTop),
+%%                 ?_assertEqual({ok, [{data, <<?TOP_TAG, ExpectedTopData/binary>>}]}, Res)
+%%             ]
+%%         end
+%%     ).
+%%
+%% login_test_() ->
+%%     Profile = [
+%%         {<<"rank">>, 1},
+%%         {<<"experience">>, 2},
+%%         {<<"reserved1">>, 1},
+%%         {<<"reserved2">>, 2},
+%%         {<<"reserved3">>, 3},
+%%         {<<"reserved4">>, 5},
+%%         {<<"reserved5">>, 5},
+%%         {<<"reserved6">>, 6},
+%%         {<<"reserved7">>, 7},
+%%         {<<"score">>, 100},
+%%         {<<"achievements">>, [1,2,3,4,5,6,7,8]}
+%%     ],
+%%     fixture(
+%%         fun(_) ->
+%%             TestHost = self(),
+%%             ok = application:set_env(game_server, profile, database),
+%%
+%%             ok = meck:expect(
+%%                 mock_session_writer, send,
+%%                 fun(_Socket, Data) ->
+%%                     ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+%%                     TestHost ! {self(), ParseResult},
+%%                     ok
+%%                 end
+%%             ),
+%%             ok = meck:new(database),
+%%             ok =
+%%                 meck:expect(
+%%                     database, login,
+%%                     fun(Login, Password) ->
+%%                         TestHost ! {self(), {login, Login, Password}},
+%%                         {ok, Profile}
+%%                     end
+%%                 ),
+%%
+%%             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+%%             MonitorRef = monitor(process, RemoteClientPid),
+%%             RegisterRequest = iolist_to_binary([ <<?LOGIN_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
+%%             ok = client_session:send_command(
+%%                 RemoteClientPid, {data, RegisterRequest}
+%%             ),
+%%
+%%             SessionDown = lobby_utils:wait_process_down(MonitorRef, 100),
+%%             RegisterInDatabase = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%             RegisterOkResponse = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%
+%%             EncodedProfile = session_utils:encode_profile_request(Profile),
+%%             ExpectedProfileFrame = <<?PROFILE_TAG, EncodedProfile/binary>>,
+%%             ok = meck:unload(database),
+%%
+%%             [
+%%                 ?_assertEqual({error, timeout}, SessionDown),
+%%                 ?_assertEqual({ok, {login, <<"login">>, <<"password">>}}, RegisterInDatabase),
+%%                 ?_assertEqual({ok, [
+%%                     {data, <<?LOGIN_TAG, 1>>}, {data, ExpectedProfileFrame}
+%%                 ]}, RegisterOkResponse)
+%%             ]
+%%
+%%         end
+%%     ).
+%%
+%% update_profile_not_auth_test_() ->
+%%     Profile = [
+%%         {<<"rank">>, 1},
+%%         {<<"experience">>, 2},
+%%         {<<"reserved1">>, 1},
+%%         {<<"reserved2">>, 2},
+%%         {<<"reserved3">>, 3},
+%%         {<<"reserved4">>, 5},
+%%         {<<"reserved5">>, 5},
+%%         {<<"reserved6">>, 6},
+%%         {<<"reserved7">>, 7},
+%%         {<<"score">>, 100},
+%%         {<<"achievements">>, [1,2,3,4,5,6,7,8]}
+%%     ],
+%%     fixture(
+%%         fun(_) ->
+%%             ok = application:set_env(game_server, profile, database),
+%%             TestHost = self(),
+%%
+%%             ok = meck:expect(
+%%                 mock_session_writer, send,
+%%                 fun(_Socket, Data) ->
+%%                     ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+%%                     TestHost ! {self(), ParseResult},
+%%                     ok
+%%                 end
+%%             ),
+%%
+%%             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+%%             MonitorRef = monitor(process, RemoteClientPid),
+%%             ProfileRequest = session_utils:make_server_frame(
+%%                 [?PROFILE_TAG, session_utils:encode_profile_request(Profile)]
+%%             ),
+%%             ok = client_session:send_command(
+%%                 RemoteClientPid, {data, ProfileRequest}
+%%             ),
+%%
+%%             SessionDown = lobby_utils:wait_process_down_reason(MonitorRef, 1000),
+%%
+%%             [
+%%                 ?_assertEqual({ok, not_auth}, SessionDown)
+%%             ]
+%%
+%%         end
+%%     ).
+%%
+%% update_profile_test_() ->
+%%     Profile = [
+%%         {<<"rank">>, 1},
+%%         {<<"experience">>, 2},
+%%         {<<"reserved1">>, 1},
+%%         {<<"reserved2">>, 2},
+%%         {<<"reserved3">>, 3},
+%%         {<<"reserved4">>, 5},
+%%         {<<"reserved5">>, 5},
+%%         {<<"reserved6">>, 6},
+%%         {<<"reserved7">>, 7},
+%%         {<<"score">>, 100},
+%%         {<<"achievements">>, [1,2,3,4,5,6,7,8]}
+%%     ],
+%%     fixture(
+%%         fun(_) ->
+%%             ok = application:set_env(game_server, profile, database),
+%%             TestHost = self(),
+%%
+%%             ok = meck:expect(
+%%                 mock_session_writer, send,
+%%                 fun(_Socket, Data) ->
+%%                     ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+%%                     TestHost ! {self(), ParseResult},
+%%                     ok
+%%                 end
+%%             ),
+%%             ok = meck:new(database),
+%%             ok =
+%%                 meck:expect(
+%%                     database, login,
+%%                     fun(Login, Password) ->
+%%                         TestHost ! {self(), {login, Login, Password}},
+%%                         {ok, Profile}
+%%                     end
+%%                 ),
+%%
+%%             ok = meck:expect(
+%%                 database, update_profile,
+%%                 fun(UpdatedProfile, Login) ->
+%%                     TestHost ! {self(), {update_profile, Login, UpdatedProfile}},
+%%                     {ok, UpdatedProfile}
+%%                 end
+%%             ),
+%%
+%%             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+%%             MonitorRef = monitor(process, RemoteClientPid),
+%%
+%%             LoginRequest = iolist_to_binary([ <<?LOGIN_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
+%%             ok = client_session:send_command( RemoteClientPid, {data, LoginRequest} ),
+%%             {ok, {login, <<"login">>, <<"password">>}} =
+%%                 lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%             {ok, _} = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%
+%%
+%%             ProfileRequest = [?PROFILE_TAG, session_utils:encode_profile_request(Profile)],
+%%
+%%             ok = client_session:send_command( RemoteClientPid, {data, iolist_to_binary(ProfileRequest)} ),
+%%             UpdateProfile = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%             ProfileResponse = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%
+%%             ok = meck:unload(database),
+%%
+%%             SessionDown = lobby_utils:wait_process_down(MonitorRef, 100),
+%%
+%%             [
+%%                 ?_assertMatch({ok, {update_profile, <<"login">>, _}}, UpdateProfile),
+%%                 ?_assertMatch({ok, [{data, _}]}, ProfileResponse),
+%%                 ?_assertEqual({error, timeout}, SessionDown)
+%%             ]
+%%
+%%         end
+%%     ).
+%%
+%%
+%% invalid_login_test_() ->
+%%     fixture(
+%%         fun(_) ->
+%%             TestHost = self(),
+%%             ok = application:set_env(game_server, profile, database),
+%%
+%%             ok = meck:expect(
+%%                 mock_session_writer, send,
+%%                 fun(_Socket, Data) ->
+%%                     ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+%%                     TestHost ! {self(), ParseResult},
+%%                     ok
+%%                 end
+%%             ),
+%%             ok = meck:new(database),
+%%             ok =
+%%                 meck:expect(
+%%                     database, login,
+%%                     fun(Login, Password) ->
+%%                         TestHost ! {self(), {login, Login, Password}},
+%%                         {error, not_found}
+%%                     end
+%%                 ),
+%%
+%%             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+%%             MonitorRef = monitor(process, RemoteClientPid),
+%%             RegisterRequest = iolist_to_binary([ <<?LOGIN_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
+%%             ok = client_session:send_command(
+%%                 RemoteClientPid, {data, RegisterRequest}
+%%             ),
+%%
+%%             SessionAlive = lobby_utils:wait_process_down(MonitorRef, 100),
+%%             RegisterInDatabase = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%             RegisterOkResponse = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+%%
+%%             ok = client_session:send_command(RemoteClientPid, {command, ?START_GAME_PACKET(0)}),
+%%             SessionDown = lobby_utils:wait_process_down_reason(MonitorRef, 1000),
+%%             ok = meck:unload(database),
+%%             [
+%%                 ?_assertEqual({error, timeout}, SessionAlive),
+%%                 ?_assertEqual({ok, {login, <<"login">>, <<"password">>}}, RegisterInDatabase),
+%%                 ?_assertEqual({ok, [{data, <<?LOGIN_TAG, 0>>}]}, RegisterOkResponse),
+%%                 ?_assertEqual({ok, not_auth}, SessionDown)
+%%             ]
+%%
+%%         end
+%%     ).
+%%
+%% login_in_idle_state_test_() ->
+%%     fixture(
+%%         fun(_) ->
+%%             TestHost = self(),
+%%             ok = application:set_env(game_server, profile, undefined),
+%%
+%%             ok = meck:expect(
+%%                 mock_session_writer, send,
+%%                 fun(_Socket, Data) ->
+%%                     ParseResult = protocol_parser:parse(iolist_to_binary(Data)),
+%%                     TestHost ! {self(), ParseResult},
+%%                     ok
+%%                 end
+%%             ),
+%%
+%%
+%%             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
+%%             MonitorRef = monitor(process, RemoteClientPid),
+%%             RegisterRequest = iolist_to_binary([ <<?LOGIN_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
+%%             ok = client_session:send_command(
+%%                 RemoteClientPid, {data, RegisterRequest}
+%%             ),
+%%
+%%             SessionDown = lobby_utils:wait_process_down_reason(MonitorRef, 100),
+%%
+%%             [
+%%                 ?_assertEqual({ok, protocol_violation}, SessionDown)
+%%             ]
+%%
+%%         end
+%%     ).
 
 start_game_test_() ->
     fixture(
@@ -567,7 +567,7 @@ start_game_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    {ok, _} = game_lobby:checkin(self()),
+                    {ok, _} = game_lobby:checkin(self(), "red"),
                     GameStartResult =
                         case lobby_utils:wait_game_start(100) of
                             {ok, GameStart} ->
@@ -607,7 +607,7 @@ fail_to_start_game_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    {ok, _Token} = game_lobby:checkin(self()),
+                    {ok, _Token} = game_lobby:checkin(self(), "red"),
                     {ok, GameStartResult} = lobby_utils:wait_game_start(100),
                     TestHost ! {self(), GameStartResult},
                     GameStopResult = lobby_utils:wait_game_stop(),
@@ -736,7 +736,7 @@ cancel_running_game_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    {ok, Token} = game_lobby:checkin(self()),
+                    {ok, Token} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{ token = Token, turn = true }} = lobby_utils:wait_game_start(),
                     GameStopResult = lobby_utils:wait_game_stop(),
                     TestHost ! {self(), GameStopResult}
@@ -772,7 +772,7 @@ fail_cancel_running_game_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    {ok, Token} = game_lobby:checkin(self()),
+                    {ok, Token} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{ token = Token, turn = true }} = lobby_utils:wait_game_start(),
                     GameStopResult = lobby_utils:wait_game_stop(),
                     TestHost ! {self(), GameStopResult}
@@ -819,7 +819,7 @@ reconnect_game_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    {ok, Token} = game_lobby:checkin(self()),
+                    {ok, Token} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{ token = Token, turn = true, session_pid = SessionPid }} = lobby_utils:wait_game_start(),
                     PeerLostResult = lobby_utils:wait_peer_lost(SessionPid),
                     TestHost ! {self(), PeerLostResult},
@@ -871,7 +871,7 @@ reconnect_game_with_invalid_tag_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    {ok, Token} = game_lobby:checkin(self()),
+                    {ok, Token} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{ token = Token, turn = true, session_pid = SessionPid }} = lobby_utils:wait_game_start(),
                     PeerLostResult = lobby_utils:wait_peer_lost(SessionPid),
                     TestHost ! {self(), PeerLostResult},
@@ -929,7 +929,7 @@ reconnect_game_with_invalid_token_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    {ok, Token} = game_lobby:checkin(self()),
+                    {ok, Token} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{ token = Token, turn = true, session_pid = SessionPid }} = lobby_utils:wait_game_start(),
                     PeerLostResult = lobby_utils:wait_peer_lost(SessionPid),
                     TestHost ! {self(), PeerLostResult},
@@ -1000,7 +1000,7 @@ game_stopped_by_peer_test_() ->
 
             ClientFun =
                 fun() ->
-                    {ok, Token} = game_lobby:checkin(self()),
+                    {ok, Token} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{ token = Token, turn = false}} = lobby_utils:wait_game_start(),
                     {ok, Token} = game_lobby:cancel(Token)
                 end,
@@ -1035,7 +1035,7 @@ peer_lost_test_() ->
 
             ClientFun =
                 fun() ->
-                    {ok, Token} = game_lobby:checkin(self()),
+                    {ok, Token} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{ token = Token, turn = false}} = lobby_utils:wait_game_start()
                 end,
             spawn(ClientFun),
@@ -1045,7 +1045,7 @@ peer_lost_test_() ->
 
             NewClientFun =
                 fun() ->
-                    {ok, Token} = game_lobby:checkin(self()),
+                    {ok, Token} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{ token = Token, turn = false}} = lobby_utils:wait_game_start(),
                     {ok, #game_stop{ token = Token }} = lobby_utils:wait_game_stop()
                 end,
@@ -1078,7 +1078,7 @@ peer_first_turn_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    {ok, Token} = game_lobby:checkin(self()),
+                    {ok, Token} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{ token = Token, turn = true, session_pid = SessionPid, tag = PeerTag}}
                         = lobby_utils:wait_game_start(),
                     ok = game_session:make_turn( SessionPid, PeerTag, TurnData),
@@ -1117,7 +1117,7 @@ peer_surrender_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    {ok, _} = game_lobby:checkin(self()),
+                    {ok, _} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{turn = true, session_pid = SessionPid, tag = Tag}} = lobby_utils:wait_game_start(),
                     ok = game_session:surrender(SessionPid, Tag, ?SURRENDER_PACKET(0, 0, 0)),
                     GameStopResult = lobby_utils:wait_game_stop(),
@@ -1161,7 +1161,7 @@ turn_instead_of_surrender_ack_test_() ->
             TestHost = self(),
             ClientFun =
                 fun() ->
-                    {ok, _} = game_lobby:checkin(self()),
+                    {ok, _} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{turn = true, session_pid = SessionPid, tag = Tag}} = lobby_utils:wait_game_start(),
                     ok = game_session:surrender(SessionPid, Tag, ?SURRENDER_PACKET(0, 0, 0)),
                     GameStopResult = lobby_utils:wait_game_stop(),

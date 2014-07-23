@@ -5,8 +5,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("game_lobby/include/common.hrl").
 
-before_test() ->
-    error_logger:tty(false).
+%% before_test() ->
+%%     error_logger:tty(false).
 
 start_game_session_test_() ->
     TestProc = self(),
