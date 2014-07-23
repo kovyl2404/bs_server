@@ -10,11 +10,14 @@
 -export([
     start/2,
     stop/1,
+    register/3,
+    login/3,
     start_game/1,
     stop_game/1,
     surrender/1,
     make_turn/2,
     reconnect_game/2,
+    update_profile/2,
     set_owner/2
 ]).
 
@@ -47,6 +50,12 @@ start(Host, Port) ->
 stop(Pid) ->
     gen_server:cast(Pid, stop).
 
+register(ClientEmulator, Login, Password) ->
+    gen_server:cast(ClientEmulator, {register, Login, Password}).
+
+login(ClientEmulator, Login, Password) ->
+    gen_server:cast(ClientEmulator, {login, Login, Password}).
+
 start_game(ClientEmulator) ->
     ok = gen_server:cast(ClientEmulator, start_game).
 
@@ -64,6 +73,9 @@ set_owner(ClientEmulator, Pid) ->
 
 reconnect_game(ClientEmulator, Data) ->
     gen_server:cast(ClientEmulator, {reconnect, Data}).
+
+update_profile(ClientEmulator, Profile) ->
+    gen_server:cast(ClientEmulator, {update_profile, Profile}).
 
 
 %%%===================================================================
@@ -86,6 +98,54 @@ handle_call({set_owner, Pid}, _From, State) ->
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
+
+
+handle_cast(
+    {login, Login, Password},
+    #state{
+        socket = Socket
+    } = State
+) ->
+    ok = gen_tcp:send(
+        Socket,
+        session_utils:make_server_frame([
+            ?LOGIN_TAG,
+            session_utils:encode_auth_request(Login, Password)
+        ])
+    ),
+    {noreply, State};
+
+handle_cast(
+    {register, Login, Password},
+    #state{
+        socket = Socket
+    } = State
+) ->
+    ok = gen_tcp:send(
+        Socket,
+        session_utils:make_server_frame([
+            ?REGISTER_TAG,
+            session_utils:encode_auth_request(Login, Password)
+        ])
+    ),
+    {noreply, State};
+
+
+handle_cast(
+    {update_profile, Profile},
+    #state{
+        socket = Socket
+    } = State
+) ->
+    ok = gen_tcp:send(
+        Socket,
+        session_utils:make_server_frame([
+            ?PROFILE_TAG,
+            session_utils:encode_profile_request(Profile)
+        ])
+    ),
+    {noreply, State};
+
 
 handle_cast(
     start_game,
@@ -158,6 +218,12 @@ handle_info(
     }};
 
 handle_info(
+    {tcp_closed, _},
+    State
+) ->
+    {stop, normal, State};
+
+handle_info(
     {command, ?PING_PACKET = Ping},
     #state{
         socket = Socket
@@ -215,6 +281,30 @@ handle_info(
     } = State
 ) ->
     Owner ! {self(), {turn,TurnData}},
+    {noreply, State};
+
+handle_info(
+    {data, <<?REGISTER_TAG, RegisterResponse/binary>>},
+    #state{owner = Owner} = State
+) ->
+    {ok, Auth} = session_utils:decode_auth_response(RegisterResponse),
+    Owner ! {self(), {register, Auth}},
+    {noreply, State};
+
+handle_info(
+    {data, <<?LOGIN_TAG, LoginResponse/binary>>},
+    #state{ owner = Owner } = State
+) ->
+    {ok, Auth} = session_utils:decode_auth_response(LoginResponse),
+    Owner ! {self(), {login, Auth}},
+    {noreply, State};
+
+handle_info(
+    {data, <<?PROFILE_TAG, ProfileResponse/binary>>},
+    #state{ owner = Owner} = State
+) ->
+    {ok, Profile} = session_utils:decode_profile_request(ProfileResponse),
+    Owner ! {self(), {profile, orddict:from_list(Profile)}},
     {noreply, State};
 
 handle_info(_Info, State) ->

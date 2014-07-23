@@ -7,6 +7,7 @@
 
 %% API
 -export([
+    reinitialize/1,
     init/1,
     create/1,
     get_by_id/2,
@@ -24,6 +25,13 @@ create(Params) ->
     Server = couchbeam:server_connection(Host),
     couchbeam:open_or_create_db(Server, DbName).
 
+reinitialize(Params) ->
+    Host = get_host(Params),
+    DbName = get_db_name(Params),
+    Server = couchbeam:server_connection(Host),
+    {ok, _} = couchbeam:delete_db(Server, DbName),
+    {ok, _} = init(Params),
+    ok.
 
 %% API functions
 

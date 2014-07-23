@@ -9,7 +9,8 @@
     set_field/3,
     get_top/1,
     increase_field/2,
-    update_profile/2
+    update_profile/2,
+    reinitialize/0
 ]).
 
 -export([
@@ -44,6 +45,11 @@ start() ->
 stop() ->
     ok = application:stop(database),
     ok = stop_deps().
+
+reinitialize() ->
+    {ok, BackendModule} = application:get_env(database, backend),
+    {ok, BackendConfig} = application:get_env(database, backend_config),
+    BackendModule:reinitialize(BackendConfig).
 
 
 

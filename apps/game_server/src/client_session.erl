@@ -158,7 +158,7 @@ guest(
                             session_utils:make_server_frame([?PROFILE_TAG, EncodedProfile])
                         ]
                     ),
-                    {next_state, idle, State};
+                    {next_state, idle, State#state{ peer_name = Login}};
                 {error, already_registered} ->
                     Transport:send(
                         Socket,
@@ -198,9 +198,9 @@ idle(
     {data, <<?PROFILE_TAG, ProfileRequest/binary>>},
     #state{
         profile_backend = ProfileBackend,
-        peer_name = PeerName,
         transport = Transport,
-        socket = Socket
+        socket = Socket,
+        peer_name = PeerName
     } = State
 ) when ProfileBackend =/= undefined  ->
     {ok, Profile} = session_utils:decode_profile_request(ProfileRequest),
