@@ -8,7 +8,8 @@
     get_by_id/1,
     set_field/3,
     get_top/1,
-    increase_field/2
+    increase_field/2,
+    update_profile/2
 ]).
 
 -export([
@@ -113,6 +114,43 @@ login(Login, Password) ->
                     {error, not_found}
             end
     end.
+
+update_profile(NewProfileVersion, Login) ->
+    {BackendModule, BackendState} = get_backend(),
+    case BackendModule:get_by_id(Login, BackendState) of
+        {error, not_found} ->
+            {error, not_found};
+        {ok, {Profile}} ->
+            UpdatedProfile = update_fields(Profile, NewProfileVersion),
+            case BackendModule:create_profile( {UpdatedProfile}, BackendState ) of
+                {ok, {Doc}} ->
+                    {ok, Doc};
+                {error, _} = Error ->
+                    Error
+            end
+    end.
+
+
+update_fields(Profile, NewProfileVersion) ->
+    SortedProfile = orddict:from_list(Profile),
+    UpdateFields = [
+        <<"rank">>, <<"experience">>, <<"achievements">>,
+        <<"reserved1">>, <<"reserved2">>, <<"reserved3">>,
+        <<"reserved4">>, <<"reserved5">>, <<"reserved6">>,
+        <<"reserved7">>
+    ],
+    lists:foldl(
+        fun(Field, Acc) ->
+            case lists:keyfind(Field, 1, NewProfileVersion) of
+                {_, Value} ->
+                    orddict:store(Field, Value, Acc);
+                _ ->
+                    Acc
+            end
+        end, SortedProfile, UpdateFields
+    ).
+
+
 
 set_field(Field, Value, Login) ->
     {BackendModule, BackendState} = get_backend(),

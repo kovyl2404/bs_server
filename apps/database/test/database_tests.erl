@@ -187,6 +187,34 @@ increase_field_non_existent_profile_test_() ->
         end
     ).
 
+update_profile_test_() ->
+    fixture(
+        fun(_) ->
+            {ok, _} = database:register(<<"user1">>, <<"qwerty">>),
+            {ok, UpdatedProfile} =
+                database:update_profile(
+                    [
+                        {<<"achievements">>, [1,2,3,4,5,6,7,8]},
+                        {<<"rank">>, 10},
+                        {<<"password">>, <<"ytrewq">>},
+                        {<<"score">>, 100500}
+                    ],
+                    <<"user1">>
+                ),
+            PasswordChanged = database:login(<<"user1">>, <<"ytrewq">>),
+            PasswordChangeIgnored = database:login(<<"user1">>, <<"qwerty">>),
+            {ok, ActualProfile} = database:get_by_id(<<"user1">>),
+            [
+                ?_assertEqual({error, not_found}, PasswordChanged),
+                ?_assertMatch({ok, _}, PasswordChangeIgnored),
+                ?_assertEqual(UpdatedProfile, ActualProfile),
+                ?_assertEqual(10, proplists:get_value(<<"rank">>, ActualProfile)),
+                ?_assertEqual([1,2,3,4,5,6,7,8], proplists:get_value(<<"achievements">>, ActualProfile)),
+                ?_assertEqual(0, proplists:get_value(<<"score">>, ActualProfile))
+            ]
+        end
+    ).
+
 get_top_test_() ->
     fixture(
         fun(_) ->
