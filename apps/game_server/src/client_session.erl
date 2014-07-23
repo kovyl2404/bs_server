@@ -87,8 +87,12 @@ handle_event(
     end;
 
 handle_event(
-    stop, _StateName, State
+    stop, _StateName,
+    #state{
+        peer_name = PeerName
+    } = State
 ) ->
+    lager:debug("Client session ~p stopped with transport consideration",[PeerName]),
     {stop, normal, State}.
 
 handle_sync_event(_, _, _StateName, State) ->
@@ -427,16 +431,7 @@ handle_info(
 code_change(_OldVsn, StateName, StateData, _Extra) ->
     {ok, StateName, StateData}.
 
-terminate(
-    Reason, StateName,
-    #state{
-        peer_name = PeerName
-    } = State
-) ->
-    lager:debug(
-        "Client session ~p stopped in state ~p with reason ~p. State data ~p",
-        [PeerName, StateName, Reason, State]
-    ),
+terminate( _, _, _ ) ->
     ok.
 
 
