@@ -118,12 +118,16 @@ guest(
     case session_utils:decode_auth_request(AuthRequest) of
         {ok, {Login, Password}} ->
             case ProfileBackend:login(Login, Password) of
-                {ok, _} ->
+                {ok, Profile} ->
+                    EncodedProfile = session_utils:encode_profile_request(Profile),
                     Transport:send(
-                        Socket,
-                        session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(true)])
+                        Socket,[
+                            session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(true)]),
+                            session_utils:make_server_frame([?PROFILE_TAG, EncodedProfile])
+                        ]
+
                     ),
-                    {next_state, idle, State};
+                    {next_state, idle, State#state{ peer_name = <<"login">>}};
                 {error, not_found} ->
                     Transport:send(
                         Socket,
@@ -146,10 +150,13 @@ guest(
     case session_utils:decode_auth_request(RegisterRequest) of
         {ok, {Login, Password}} ->
             case ProfileBackend:register(Login, Password) of
-                {ok, _} ->
+                {ok, Profile} ->
+                    EncodedProfile = session_utils:encode_profile_request(Profile),
                     Transport:send(
-                        Socket,
-                        session_utils:make_server_frame([?REGISTER_TAG, session_utils:encode_auth_response(true)])
+                        Socket,[
+                            session_utils:make_server_frame([?REGISTER_TAG, session_utils:encode_auth_response(true)]),
+                            session_utils:make_server_frame([?PROFILE_TAG, EncodedProfile])
+                        ]
                     ),
                     {next_state, idle, State};
                 {error, already_registered} ->
@@ -186,6 +193,25 @@ idle(
 idle( {command, Command}, #state{peer_name = PeerName} = State ) ->
     lager:debug("Received unexpected command ~p from ~p in idle state", [Command, PeerName]),
     {stop, protocol_violation, State};
+
+idle(
+    {data, <<?PROFILE_TAG, ProfileRequest/binary>>},
+    #state{
+        profile_backend = ProfileBackend,
+        peer_name = PeerName,
+        transport = Transport,
+        socket = Socket
+    } = State
+) when ProfileBackend =/= undefined  ->
+    {ok, Profile} = session_utils:decode_profile_request(ProfileRequest),
+    {ok, UpdatedProfile} = ProfileBackend:update_profile(Profile, PeerName),
+    EncodedProfile = session_utils:encode_profile_request(UpdatedProfile),
+    ok = Transport:send(
+        Socket,[
+            session_utils:make_server_frame([?PROFILE_TAG, EncodedProfile])
+        ]
+    ),
+    {next_state, idle, State};
 
 idle( _, State ) ->
     {stop, protocol_violation, State}.

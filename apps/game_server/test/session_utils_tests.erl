@@ -35,3 +35,23 @@ encode_decode_register_response_test() ->
         ?_assertEqual({ok, true}, Result1),
         ?_assertEqual({ok, false}, Result2)
     ].
+
+encode_decode_profile_test() ->
+    Profile = [
+        {<<"rank">>, 1},
+        {<<"experience">>, 2},
+        {<<"reserved1">>, 1},
+        {<<"reserved2">>, 2},
+        {<<"reserved3">>, 3},
+        {<<"reserved4">>, 5},
+        {<<"reserved5">>, 5},
+        {<<"reserved6">>, 6},
+        {<<"reserved7">>, 7},
+        {<<"score">>, 100},
+        {<<"achievements">>, [1,2,3,4,5,6,7,8]}
+    ],
+    Packet = session_utils:encode_profile_request(Profile),
+    {ok, DecodedProfile} = session_utils:decode_profile_request(Packet),
+    [
+        ?_assertEqual(lists:sort(Profile), lists:sort(DecodedProfile))
+    ].

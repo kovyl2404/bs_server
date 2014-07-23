@@ -12,7 +12,9 @@
     encode_auth_request/2,
     decode_auth_request/1,
     encode_auth_response/1,
-    decode_auth_response/1
+    decode_auth_response/1,
+    encode_profile_request/1,
+    decode_profile_request/1
 ]).
 
 make_server_frame(Iolist) ->
@@ -51,6 +53,65 @@ decode_auth_request(Packet) ->
     case Packet of
         <<Login:64/binary, Password:64/binary>> ->
             {ok, {strip_trailing_zeros(Login), strip_trailing_zeros(Password)}};
+        _ ->
+            {error, invalid_packet}
+    end.
+
+encode_profile_request(RawProfile) ->
+    Profile = orddict:from_list(RawProfile),
+    Rank = orddict:fetch(<<"rank">>, Profile),
+    Experience = orddict:fetch(<<"experience">>, Profile),
+    Reserved1 = orddict:fetch(<<"reserved1">>, Profile),
+    Reserved2 = orddict:fetch(<<"reserved2">>, Profile),
+    Reserved3 = orddict:fetch(<<"reserved3">>, Profile),
+    Reserved4 = orddict:fetch(<<"reserved4">>, Profile),
+    Reserved5 = orddict:fetch(<<"reserved5">>, Profile),
+    Reserved6 = orddict:fetch(<<"reserved6">>, Profile),
+    Reserved7 = orddict:fetch(<<"reserved7">>, Profile),
+    Score = orddict:fetch(<<"score">>, Profile),
+    Achievements = list_to_binary(orddict:fetch(<<"achievements">>, Profile)),
+    <<
+        Rank:4/unsigned-big-integer,
+        Experience:4/unsigned-big-integer,
+        Reserved1:4/unsigned-big-integer,
+        Reserved2:4/unsigned-big-integer,
+        Reserved3:4/unsigned-big-integer,
+        Reserved4:4/unsigned-big-integer,
+        Reserved5:4/unsigned-big-integer,
+        Reserved6:4/unsigned-big-integer,
+        Reserved7:4/unsigned-big-integer,
+        Score:4/unsigned-big-integer,
+        Achievements/binary
+    >>.
+
+decode_profile_request(Packet) ->
+    case Packet of
+        <<Rank:4/unsigned-big-integer,
+            Experience:4/unsigned-big-integer,
+            Reserved1:4/unsigned-big-integer,
+            Reserved2:4/unsigned-big-integer,
+            Reserved3:4/unsigned-big-integer,
+            Reserved4:4/unsigned-big-integer,
+            Reserved5:4/unsigned-big-integer,
+            Reserved6:4/unsigned-big-integer,
+            Reserved7:4/unsigned-big-integer,
+            Score:4/unsigned-big-integer,
+            Achievements:8/binary
+        >> ->
+            Profile = [
+                {<<"rank">>, Rank},
+                {<<"experience">>, Experience},
+                {<<"reserved1">>, Reserved1},
+                {<<"reserved2">>, Reserved2},
+                {<<"reserved3">>, Reserved3},
+                {<<"reserved4">>, Reserved4},
+                {<<"reserved5">>, Reserved5},
+                {<<"reserved6">>, Reserved6},
+                {<<"reserved7">>, Reserved7},
+                {<<"score">>, Score},
+                {<<"achievements">>, binary_to_list(Achievements)}
+            ],
+            {ok, Profile};
         _ ->
             {error, invalid_packet}
     end.
