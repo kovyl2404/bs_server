@@ -325,7 +325,8 @@ running_game(
         client_tag = ClientTag,
         is_ours_turn = true,
         is_surrender_claimed = IsSurrenderClaimed,
-        peer_name = PeerName
+        peer_name = PeerName,
+        profile_backend = ProfileBackend
     } = State
 ) ->
     ok = game_session:surrender(GameSession, ClientTag, Surrender),
@@ -335,7 +336,11 @@ running_game(
                 "Acknowledge for peer SURRENDER_PACKET ~p from ~p in running_game state (this peer wins)",
                 [Surrender, PeerName]
             ),
-            update_profile_wins();
+            case ProfileBackend of
+                undefined -> ok;
+                _ ->
+                    {ok, _} = ProfileBackend:increase_field(<<"score">>, PeerName)
+            end;
         false ->
             lager:debug(
                 "Received SURRENDER_PACKET ~p from ~p in running_game state (this peer was surrendered)",
@@ -580,8 +585,6 @@ terminate( _, _, _ ) ->
 turn_flag(true) -> 1;
 turn_flag(false) -> 0.
 
-update_profile_wins() ->
-    ok.
 
 profile_backend() ->
     case application:get_env(game_server, profile) of
