@@ -9,7 +9,7 @@
 -define(
     CLIENT_SESSION_DEPS,
     [
-        game_lobby
+        ranch, game_lobby
     ]
 ).
 -define(DEFAULT_ACCEPTORS_COUNT, 100).
