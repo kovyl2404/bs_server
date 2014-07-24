@@ -5,7 +5,8 @@
   {registered, []},
   {applications, [
                   kernel,
-                  stdlib
+                  stdlib,
+		  couchbeam
                  ]},
   {mod, { database, []}},
   {env, [

@@ -8,3 +8,5 @@ ebin/
 .eunit/
 out/
 log/
+*.swp
+*.dump
