@@ -129,7 +129,7 @@ guest(
                     ),
                     {next_state, idle, State#state{ peer_name = <<"login">>}};
                 {error, not_found} ->
-                    ?DEBUG("Client session ~p failed authentication",[self()]),
+                    ?ERROR("Client session ~p failed authentication",[self()]),
                     Transport:send(
                         Socket,
                         session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(false)])
