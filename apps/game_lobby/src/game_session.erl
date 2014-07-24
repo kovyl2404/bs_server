@@ -242,9 +242,11 @@ handle_cast(
     stop_game,
     #state{
         peer_tags = PeerTags,
-        game_token = Token
+        game_token = Token,
+        peer_labels = [{_, FirstLabel}, {_, SecondLabel}]
     } = State
 ) ->
+    ?INFO("Game of ~p vs. ~p cancelled by peer",[Token, FirstLabel, SecondLabel]),
     [ send_safe(P, #game_stop{ session_pid = self(), token = Token, tag = T }) || {T, P} <- PeerTags ],
     {stop, normal, State};
 
@@ -274,9 +276,14 @@ handle_info(
 handle_info(
     {reconnect_timeout, Tag, TimerId},
     #state{
-        reconnect_timers = ReconnectTimers
+        reconnect_timers = ReconnectTimers,
+        peer_labels = PeerLabels,
+        game_token = _Token
     } = State
 ) ->
+    DisconnectedLabel = orddict:fetch(Tag, PeerLabels),
+    [{_, FirstLabel}, {_, SecondLabel}] = PeerLabels,
+    ?INFO("Game ~p vs ~p stopped because of ~p was not reconnected in time", [{FirstLabel, SecondLabel, DisconnectedLabel}]),
     case orddict:find(Tag, ReconnectTimers) of
         {ok, TimerId} ->
             {stop, normal, State};
