@@ -1,0 +1,16 @@
+{application, metrics_collector,
+ [
+  {description, "Periodicaly dumps folsom metrics in file"},
+  {vsn, "0.0.0.1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  folsom
+                 ]},
+  {mod, { metrics_collector, []}},
+  {env, [
+      {dump_interval_sec, 60},
+      {dump_path, "./metrics/all"}
+  ]}
+ ]}.
