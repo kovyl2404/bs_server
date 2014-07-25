@@ -105,7 +105,9 @@ register(Login, Password) ->
         {error, not_found} ->
             create_profile(Login, Password);
         {ok, _} ->
-            {error, already_registered}
+            {error, already_registered};
+        Error ->
+            Error
     end.
 
 
@@ -132,7 +134,9 @@ login(Login, Password) ->
                     {ok, Profile};
                 false ->
                     {error, not_found}
-            end
+            end;
+        Error ->
+            Error
     end.
 
 update_profile(NewProfileVersion, Login) ->
@@ -148,7 +152,9 @@ update_profile(NewProfileVersion, Login) ->
                     {ok, Doc};
                 {error, _} = Error ->
                     Error
-            end
+            end;
+        Error ->
+            Error
     end.
 
 
@@ -185,7 +191,9 @@ set_field(Field, Value, Login) ->
                     {ok, Doc};
                 {error, _} = Error ->
                     Error
-            end
+            end;
+        Error ->
+            Error
     end.
 
 increase_field(Field, Login) ->
@@ -202,7 +210,9 @@ increase_field(Field, Login) ->
                     {ok, Doc};
                 {error, _} = Error ->
                     Error
-            end
+            end;
+        Error ->
+            Error
     end.
 
 get_backend() ->

@@ -47,13 +47,20 @@ no_server_test_() ->
         ]
     ),
     StartResult = application:start(database),
+    FailRegister = database:register(<<"user">>, <<"123">>),
+    FailLogin = database:register(<<"user">>, <<"123">>),
+    FailUpdate = database:update_profile(<<"used">>, []),
     StopResult = application:stop(database),
+
 
     ok = application:unload(database),
     ok = database:stop_deps(),
     [
-        ?_assertMatch({error, _}, StartResult),
-        ?_assertMatch({error, _}, StopResult)
+        ?_assertMatch(ok, StartResult),
+        ?_assertMatch(ok, StopResult),
+        ?_assertEqual({error, econnrefused}, FailLogin),
+        ?_assertEqual({error, econnrefused}, FailUpdate),
+        ?_assertEqual({error, econnrefused}, FailRegister)
     ].
 
 createdb_on_start_test_() ->
