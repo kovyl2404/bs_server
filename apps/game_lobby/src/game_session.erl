@@ -103,7 +103,8 @@ handle_call(
         reconnect_timers = ReconnectTimers,
         last_turn = LastTurn,
         game_token = Token,
-        peer_queue = PeerQueue
+        peer_queue = PeerQueue,
+        peer_labels = PeerLabels
     } = State
 ) ->
     ThisPeerTurn =
@@ -114,6 +115,8 @@ handle_call(
     erlang:monitor(process, NewPeerPid),
     case orddict:find(Tag, PeerTags) of
         {ok, OldPid} ->
+            Label = orddict:fetch(Tag, PeerLabels),
+            ?INFO("User ~p was resconnected from game ~p",[Label, Token]),
             send_safe(OldPid, #peer_change{session_pid = self()}),
             [ send_safe(P, #peer_reset{session_pid = self() }) || {T, P} <- PeerTags, T =/= Tag],
             NewPeerPid ! #game_start{
@@ -257,14 +260,18 @@ handle_info(
     {'DOWN', _, process, Pid, _Reason},
     #state{
         peer_tags = PeerTags,
-        reconnect_timers = ReconnectTimers
+        reconnect_timers = ReconnectTimers,
+        peer_labels = PeerLabels,
+        game_token = Token
     } = State
 ) ->
     case lists:keyfind(Pid, 2, PeerTags) of
         {Tag, Pid} ->
+            Label = orddict:fetch(Tag, PeerLabels),
+            ?INFO("User ~p was disconnected from game ~p",[Label, Token]),
             [ send_safe(P, #peer_lost{session_pid = self()}) || {T, P} <- PeerTags, T =/= Tag ],
             TimerId = make_ref(),
-            erlang:send_after(20000, self(), {reconnect_timeout, Tag, TimerId}),
+            erlang:send_after(reconnect_timeout(), self(), {reconnect_timeout, Tag, TimerId}),
             {noreply, State#state{
                 reconnect_timers = orddict:store(Tag, TimerId, ReconnectTimers),
                 peer_tags = orddict:store(Tag, undefined, PeerTags)
@@ -328,3 +335,7 @@ handle_turn_violation(ActualPeerTag, FailedPeerTag, PeerTags) ->
     TimerId = make_ref(),
     erlang:send_after(2000, self(), {reconnect_timeout, FailedPeerTag, TimerId}),
     TimerId.
+
+reconnect_timeout() ->
+    {ok, Value} = application:get_env(game_lobby, game_reconnect_timeout_sec),
+    trunc(Value*1000).

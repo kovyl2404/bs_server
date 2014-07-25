@@ -164,7 +164,7 @@ update_fields(Profile, NewProfileVersion) ->
         <<"rank">>, <<"experience">>, <<"achievements">>,
         <<"reserved1">>, <<"reserved2">>, <<"reserved3">>,
         <<"reserved4">>, <<"reserved5">>, <<"reserved6">>,
-        <<"reserved7">>
+        <<"reserved7">>, <<"score">>
     ],
     lists:foldl(
         fun(Field, Acc) ->

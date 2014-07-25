@@ -8,5 +8,7 @@
                   stdlib
                  ]},
   {mod, { game_lobby, []}},
-  {env, []}
+  {env, [
+      {game_reconnect_timeout_sec, 2}
+  ]}
  ]}.

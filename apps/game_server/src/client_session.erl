@@ -336,19 +336,13 @@ running_game(
         is_ours_turn = true,
         is_surrender_claimed = IsSurrenderClaimed,
         peer_name = PeerName,
-        profile_backend = ProfileBackend,
         game_token = _Token
     } = State
 ) ->
     ok = game_session:surrender(GameSession, ClientTag, Surrender),
     case IsSurrenderClaimed of
         true ->
-            ?DEBUG("Client session ~p (~p) acknowledged that remote peer surrendered in game ~p", [self(), PeerName, _Token]),
-            case ProfileBackend of
-                undefined -> ok;
-                _ ->
-                    {ok, _} = ProfileBackend:increase_field(<<"score">>, PeerName)
-            end;
+            ?DEBUG("Client session ~p (~p) acknowledged that remote peer surrendered in game ~p", [self(), PeerName, _Token]);
         false ->
             ?DEBUG("Client session ~p (~p) decided to surrendered in game ~p", [self(), PeerName, _Token])
     end,

@@ -217,7 +217,7 @@ update_profile_test_() ->
                 ?_assertEqual(UpdatedProfile, ActualProfile),
                 ?_assertEqual(10, proplists:get_value(<<"rank">>, ActualProfile)),
                 ?_assertEqual([1,2,3,4,5,6,7,8], proplists:get_value(<<"achievements">>, ActualProfile)),
-                ?_assertEqual(0, proplists:get_value(<<"score">>, ActualProfile))
+                ?_assertEqual(100500, proplists:get_value(<<"score">>, ActualProfile))
             ]
         end
     ).
