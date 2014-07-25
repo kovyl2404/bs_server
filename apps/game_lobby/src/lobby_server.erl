@@ -78,7 +78,7 @@ handle_call(
 ) ->
     WaitingMonitor = monitor(process, ClientPid),
     Token = lobby_utils:random_token(),
-    ?NOTICE("Used ~p waiting for game ~p",[ClientLabel, Token]),
+    ?NOTICE("User ~p waiting for game ~p",[ClientLabel, Token]),
     {reply, {ok, Token}, State#state{
         waiting_client = {ClientPid, Token, WaitingMonitor, ClientLabel}
     }};
@@ -92,7 +92,7 @@ handle_call(
         monitors_table = MonitorsTable
     } = State
 ) ->
-    ?NOTICE("Used ~p will play with ~p in game ~p",[ClientLabel, WaitingClientLabel]),
+    ?NOTICE("User ~p will play with ~p in game ~p",[ClientLabel, WaitingClientLabel, WaitingToken]),
     FirstTag = lobby_utils:random_token(),
     SecondTag = lobby_utils:random_token(),
     demonitor(WaitingMonitor, [flush]),

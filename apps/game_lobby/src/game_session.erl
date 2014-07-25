@@ -264,7 +264,7 @@ handle_info(
         {Tag, Pid} ->
             [ send_safe(P, #peer_lost{session_pid = self()}) || {T, P} <- PeerTags, T =/= Tag ],
             TimerId = make_ref(),
-            erlang:send_after(2000, self(), {reconnect_timeout, Tag, TimerId}),
+            erlang:send_after(20000, self(), {reconnect_timeout, Tag, TimerId}),
             {noreply, State#state{
                 reconnect_timers = orddict:store(Tag, TimerId, ReconnectTimers),
                 peer_tags = orddict:store(Tag, undefined, PeerTags)
@@ -283,9 +283,9 @@ handle_info(
 ) ->
     DisconnectedLabel = orddict:fetch(Tag, PeerLabels),
     [{_, FirstLabel}, {_, SecondLabel}] = PeerLabels,
-    ?INFO("Game ~p vs ~p stopped because of ~p was not reconnected in time", [{FirstLabel, SecondLabel, DisconnectedLabel}]),
     case orddict:find(Tag, ReconnectTimers) of
         {ok, TimerId} ->
+            ?INFO("Game ~p vs ~p stopped because of ~p was not reconnected in time", [FirstLabel, SecondLabel, DisconnectedLabel]),
             {stop, normal, State};
         _ ->
             {noreply, State}
