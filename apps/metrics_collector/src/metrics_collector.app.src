@@ -1,7 +1,7 @@
 {application, metrics_collector,
  [
   {description, "Periodicaly dumps folsom metrics to file"},
-  {vsn, "0.0.0.1"},
+  {vsn, "1.0.0"},
   {registered, []},
   {applications, [
                   kernel,

@@ -1,13 +1,13 @@
 {application, database,
  [
   {description, "Interface for database interaction"},
-  {vsn, "0.0.1"},
+  {vsn, "1.0.0"},
   {registered, []},
   {applications, [
                   kernel,
                   stdlib,
                   folsom,
-		          couchbeam
+	          couchbeam
                  ]},
   {mod, { database, []}},
   {env, [
