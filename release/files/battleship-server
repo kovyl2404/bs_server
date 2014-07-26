@@ -23,7 +23,11 @@ RUNNER_BASE_DIR=${RUNNER_SCRIPT_DIR%/*}
 RUNNER_ETC_DIR=$RUNNER_BASE_DIR/etc
 # Note the trailing slash on $PIPE_DIR/
 PIPE_DIR=/tmp/$RUNNER_BASE_DIR/
+
 RUNNER_USER=
+
+[ -e "/etc/default/battleship-server" ] && . /etc/default/battleship-server
+
 WHOAMI=$(whoami)
 
 # Make sure this script is running as the appropriate user
