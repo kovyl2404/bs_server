@@ -6,6 +6,7 @@
 
 -include_lib("game_lobby/include/common.hrl").
 -include_lib("game_lobby/include/logging.hrl").
+-include_lib("game_lobby/include/metrics.hrl").
 
 %% API
 -export([
@@ -76,6 +77,7 @@ handle_call(
         waiting_client = undefined
     } = State
 ) ->
+    folsom_metrics:notify({?START_GAME_REQUESTS_METRIC, 1}),
     WaitingMonitor = monitor(process, ClientPid),
     Token = lobby_utils:random_token(),
     ?NOTICE("User ~p waiting for game ~p",[ClientLabel, Token]),
@@ -102,6 +104,7 @@ handle_call(
             #peer_id{client_pid = WaitingPid, tag = FirstTag, client_label = WaitingClientLabel},
             #peer_id{client_pid = NewPid, tag = SecondTag, client_label = ClientLabel}
         ]),
+    folsom_metrics:notify({?RUNNING_GAMES_METRIC, {inc, 1}}),
     ?INFO("Starting game session ~p for game ~p",[SessionPid, WaitingToken]),
     MonitorRef = monitor(process, SessionPid),
     true = ets:insert(?SERVER, {WaitingToken, SessionPid}),
@@ -125,11 +128,14 @@ handle_call(
             ?DEBUG("Game ~p still exists in game session ~p",[GameToken, SessionPid]),
             case game_session:set_peer(SessionPid, #peer_id{ client_pid = ClientPid, tag = PeerTag, client_label = ClientLabel}) of
                 ok ->
+                    folsom_metrics:notify({?SUCCEEDED_RECONNECTIONS_METRIC, 1}),
                     {reply, {ok, GameToken}, State};
                 {error, _Reason} = Error ->
+                    folsom_metrics:notify({?FAILED_RECONNECTIONS_METRIC, 1}),
                     {reply, Error, State}
             end;
         _ ->
+            folsom_metrics:notify({?FAILED_RECONNECTIONS_METRIC, 1}),
             ?DEBUG("Game ~p not found. Session expired.",[GameToken]),
             {reply, {error, session_expired }, State}
     end;
@@ -141,6 +147,7 @@ handle_call(
         waiting_client = {WaitingClientPid, WaitingClientToken, WaitingMonitor, _ClientLabel}
     } = State
 ) when Token =:= WaitingClientToken ->
+    folsom_metrics:notify({?CANCELLED_WAITING_GAMES_METRIC, 1}),
     ?DEBUG("Waiting client ~p (~p) asked to cancel game ~p",[WaitingClientPid, _ClientLabel, WaitingClientToken]),
     demonitor(WaitingMonitor, [flush]),
     WaitingClientPid ! #game_stop{ token = Token },
@@ -154,6 +161,7 @@ handle_call(
     } = State
 ) ->
     ?DEBUG("Client asked to cancel game ~p",[Token]),
+    folsom_metrics:notify({?CANCELLED_GAMES_METRIC, 1}),
     Reply =
         case ets:lookup(?SERVER, Token) of
             [{Token, SessionPid}] ->
@@ -189,6 +197,7 @@ handle_info(
         monitors_table = MonitorsTable
     } = State
 ) ->
+    folsom_metrics:notify({?RUNNING_GAMES_METRIC, {dec, 1}}),
     [ {_, Tag} ] = ets:lookup(MonitorsTable, MonitorRef),
     true = ets:delete(?SERVER, Tag),
     {noreply, State};

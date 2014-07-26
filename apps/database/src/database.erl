@@ -13,6 +13,22 @@
     reinitialize/0
 ]).
 
+-define(DATABASE_METRICS, ?MODULE).
+
+-define(GET_TOP_METRIC, "database.get_top").
+
+-define(REGISTER_METRIC, "database.register.total").
+-define(FAIL_REGISTER_METRIC, "database.register.failed").
+-define(BACKEND_ERROR_REGISTER_METRIC, "database.register.backed_error").
+
+-define(LOGIN_METRIC, "database.login.total").
+-define(FAIL_LOGIN_METRIC, "database.login.failed").
+-define(BACKEND_ERROR_LOGIN_METRIC, "database.login.backed_error").
+
+-define(UPDATE_METRIC, "database.update_profile.total").
+-define(FAIL_UPDATE_METRIC, "database.update_profile.failed").
+-define(BACKEND_ERROR_UPDATE_METRIC, "database.update_profile.backend_error").
+
 -export([bin_to_hex/1]).
 
 -export([
@@ -66,6 +82,7 @@ reinitialize() ->
 start(_StartType, _StartArgs) ->
     {ok, BackendModule} = application:get_env(database, backend),
     {ok, BackendConfig} = application:get_env(database, backend_config),
+    ok = init_metrics(),
     case BackendModule:init(BackendConfig) of
         {ok, BackendInst} ->
             ets:new(?MODULE, [public, named_table]),
@@ -101,12 +118,15 @@ get_by_id(Login) ->
 register(Login, Password) ->
     ?DEBUG("Registering ~p in database",[Login]),
     {BackendModule, BackendState} = get_backend(),
+    folsom_metrics:notify({?REGISTER_METRIC, 1}),
     case BackendModule:get_by_id(Login, BackendState) of
         {error, not_found} ->
             create_profile(Login, Password);
         {ok, _} ->
+            folsom_metrics:notify({?FAIL_REGISTER_METRIC, 1}),
             {error, already_registered};
         Error ->
+            folsom_metrics:notify({?BACKEND_ERROR_REGISTER_METRIC, 1}),
             Error
     end.
 
@@ -125,25 +145,31 @@ create_profile(Login, Password) ->
 login(Login, Password) ->
     ?DEBUG("Trying to authenticate ~p in database",[Login]),
     {BackendModule, BackendState} = get_backend(),
+    folsom_metrics:notify({?LOGIN_METRIC, 1}),
     case BackendModule:get_by_id(Login, BackendState) of
         {error, not_found} ->
+            folsom_metrics:notify({?FAIL_LOGIN_METRIC, 1}),
             {error, not_found};
         {ok, {Profile}} ->
             case password_correct(Password, Profile) of
                 true ->
                     {ok, Profile};
                 false ->
+                    folsom_metrics:notify({?FAIL_LOGIN_METRIC, 1}),
                     {error, not_found}
             end;
         Error ->
+            folsom_metrics:notify({?BACKEND_ERROR_LOGIN_METRIC, 1}),
             Error
     end.
 
 update_profile(NewProfileVersion, Login) ->
     {BackendModule, BackendState} = get_backend(),
     ?DEBUG("Updating ~p profile in database with data ~p",[Login, NewProfileVersion]),
+    folsom_metrics:notify({?UPDATE_METRIC, 1}),
     case BackendModule:get_by_id(Login, BackendState) of
         {error, not_found} ->
+            folsom_metrics:notify({?FAIL_UPDATE_METRIC,  1}),
             {error, not_found};
         {ok, {Profile}} ->
             UpdatedProfile = update_fields(Profile, NewProfileVersion),
@@ -151,9 +177,11 @@ update_profile(NewProfileVersion, Login) ->
                 {ok, {Doc}} ->
                     {ok, Doc};
                 {error, _} = Error ->
+                    folsom_metrics:notify({?BACKEND_ERROR_UPDATE_METRIC, 1}),
                     Error
             end;
         Error ->
+            folsom_metrics:notify({?BACKEND_ERROR_UPDATE_METRIC, 1}),
             Error
     end.
 
@@ -239,6 +267,36 @@ init_profile(Login, Password) ->
         {<<"reserved7">>, 0},
         {<<"score">>, 0}
     ]}.
+
+
+init_metrics() ->
+    ok = folsom_metrics:new_meter(?GET_TOP_METRIC),
+    ok = folsom_metrics:new_meter(?REGISTER_METRIC),
+    ok = folsom_metrics:new_meter(?FAIL_REGISTER_METRIC),
+    ok = folsom_metrics:new_meter(?BACKEND_ERROR_REGISTER_METRIC),
+
+    ok = folsom_metrics:new_meter(?LOGIN_METRIC),
+    ok = folsom_metrics:new_meter(?FAIL_LOGIN_METRIC),
+    ok = folsom_metrics:new_meter(?BACKEND_ERROR_LOGIN_METRIC),
+
+    ok = folsom_metrics:new_meter(?UPDATE_METRIC),
+    ok = folsom_metrics:new_meter(?FAIL_UPDATE_METRIC),
+    ok = folsom_metrics:new_meter(?BACKEND_ERROR_UPDATE_METRIC),
+
+    ok = folsom_metrics:tag_metric(?GET_TOP_METRIC, ?DATABASE_METRICS),
+    ok = folsom_metrics:tag_metric(?REGISTER_METRIC, ?DATABASE_METRICS),
+    ok = folsom_metrics:tag_metric(?FAIL_REGISTER_METRIC, ?DATABASE_METRICS),
+    ok = folsom_metrics:tag_metric(?BACKEND_ERROR_REGISTER_METRIC, ?DATABASE_METRICS),
+
+    ok = folsom_metrics:tag_metric(?LOGIN_METRIC, ?DATABASE_METRICS),
+    ok = folsom_metrics:tag_metric(?FAIL_LOGIN_METRIC, ?DATABASE_METRICS),
+    ok = folsom_metrics:tag_metric(?BACKEND_ERROR_LOGIN_METRIC, ?DATABASE_METRICS),
+
+    ok = folsom_metrics:tag_metric(?UPDATE_METRIC, ?DATABASE_METRICS),
+    ok = folsom_metrics:tag_metric(?FAIL_UPDATE_METRIC, ?DATABASE_METRICS),
+    ok = folsom_metrics:tag_metric(?BACKEND_ERROR_UPDATE_METRIC, ?DATABASE_METRICS).
+
+
 
 bin_to_hex(B) when is_binary(B) ->
     bin_to_hex(B, <<>>).

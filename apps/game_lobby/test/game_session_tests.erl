@@ -15,7 +15,8 @@ before_test() ->
         {lager_file_backend, [{file, "../../../test_log/game_session_tests.log"}]}
     ]),
     ok = application:set_env(lager, error_logger_hwm, 1000),
-    ok = application:start(lager).
+    ok = application:start(lager),
+    ok = application:start(folsom).
 
 start_game_session_test_() ->
     TestProc = self(),
@@ -513,6 +514,7 @@ peer_surrender_and_reconnects_test_() ->
     ].
 
 after_test() ->
+    ok = application:stop(folsom),
     ok = application:stop(lager),
     ok = application:unload(lager),
     ok = application:stop(goldrush),

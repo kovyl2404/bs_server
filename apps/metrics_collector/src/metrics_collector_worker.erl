@@ -2,6 +2,8 @@
 -module(metrics_collector_worker).
 -author("Viacheslav V. Kovalev").
 
+-include_lib("eunit/include/eunit.hrl").
+
 -behaviour(gen_server).
 
 %% API
@@ -19,8 +21,9 @@
 
 -record(
     state, {
-        metrics_file,
-        update_interval
+        metrics_path,
+        update_interval,
+        metrics_tags
     }
 ).
 
@@ -29,18 +32,32 @@
 %%%===================================================================
 
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    {ok, MetricsPath} = application:get_env(metrics_collector, metrics_path),
+    {ok, MetricsInterval} = application:get_env(metrics_collector, metrics_update_interval),
+    {ok, MetricsTags} = application:get_env(metrics_collector, metrics_tags),
+    gen_server:start_link(
+        {local, ?SERVER}, ?MODULE,
+        {MetricsPath, MetricsInterval, MetricsTags},
+        []
+    ).
 
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
 
-init({MetricsFile, UpdateIntervalSec}) ->
+init({MetricsPath, UpdateIntervalSec, MetricsTags}) ->
     Interval = trunc(UpdateIntervalSec*1000),
     erlang:send_after(Interval, self(), flush_metrics),
+    case filelib:ensure_dir(MetricsPath) of
+        ok -> ok;
+        {error, _} = Error ->
+            FullDirName = filename:absname(MetricsPath),
+            lager:error("Failed to create metrics dir ~p with reason ~p",[FullDirName, Error])
+    end,
     {ok, #state{
-        metrics_file = MetricsFile,
-        update_interval = Interval
+        metrics_path = MetricsPath,
+        update_interval = Interval,
+        metrics_tags = MetricsTags
     }}.
 
 
@@ -54,12 +71,24 @@ handle_cast(_Request, State) ->
 handle_info(
     flush_metrics,
     #state{
-        metrics_file = MetricsFile,
-        update_interval = Interval
+        metrics_path = MetricsPath,
+        update_interval = Interval,
+        metrics_tags = MetricsTags
     } = State
 ) ->
+    lists:foreach(
+        fun({Tag, FileName}) ->
+            Dumpfile = filename:join(MetricsPath, FileName),
+            MetricsValues = folsom_metrics:get_metrics_value(Tag),
+            case dump_to_file(MetricsValues, Dumpfile) of
+                ok ->
+                    ok;
+                Reason ->
+                    lager:error("Failed to dump metrics to file ~p with reason ~p",[Dumpfile, Reason])
+            end
+        end, MetricsTags
+    ),
     erlang:send_after(Interval, self(), flush_metrics),
-    dump_metrics(MetricsFile),
     {noreply, State};
 
 handle_info(_Info, State) ->
@@ -77,5 +106,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 
-dump_metrics(_MetricsFile) ->
-    ok.
+dump_to_file(Values, Dumpfile) ->
+    SortedValues = lists:sort(Values),
+    file:write_file(Dumpfile, format_values(SortedValues, [])).
+
+format_values([], Acc) ->
+    lists:reverse(Acc);
+format_values([{MetricName, Values} | Rest], Acc) ->
+    Count = proplists:get_value(count, Values),
+    format_values(
+        Rest,
+        [ io_lib:format("~s.count = ~p~n", [MetricName, Count]) | Acc]
+    ).

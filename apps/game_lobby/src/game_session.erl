@@ -7,6 +7,7 @@
 -include_lib("game_lobby/include/common.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("game_lobby/include/logging.hrl").
+-include_lib("game_lobby/include/metrics.hrl").
 
 %% API
 -export([
@@ -292,6 +293,7 @@ handle_info(
     [{_, FirstLabel}, {_, SecondLabel}] = PeerLabels,
     case orddict:find(Tag, ReconnectTimers) of
         {ok, TimerId} ->
+            folsom_metrics:notify({?TIMEDOUT_GAMES_METRIC, 1}),
             ?INFO("Game ~p vs ~p stopped because of ~p was not reconnected in time", [FirstLabel, SecondLabel, DisconnectedLabel]),
             {stop, normal, State};
         _ ->

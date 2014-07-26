@@ -27,6 +27,7 @@ fixture(Inst) ->
 
 
 setup() ->
+    ok = application:start(folsom),
     ok = couchbeam:start(),
     ok = ensure_db_absent(?COUCH_HOST, ?COUCH_DB),
     ok = ensure_db_present(?COUCH_HOST, ?COUCH_DB),
@@ -43,11 +44,13 @@ setup() ->
 cleanup(_) ->
     ok = application:stop(database),
     ok = application:unload(database),
-    ok = couchbeam:stop().
+    ok = couchbeam:stop(),
+    ok = application:stop(folsom).
 
 
 
 no_server_test_() ->
+    ok = application:start(folsom),
     ok = database:start_deps(),
     ok = application:load(database),
     ok = application:set_env(database, backend, couchdb_backend),
@@ -66,6 +69,7 @@ no_server_test_() ->
 
     ok = application:unload(database),
     ok = database:stop_deps(),
+    ok = application:stop(folsom),
     [
         ?_assertMatch(ok, StartResult),
         ?_assertMatch(ok, StopResult),
@@ -75,6 +79,7 @@ no_server_test_() ->
     ].
 
 createdb_on_start_test_() ->
+    ok = application:start(folsom),
     ok = database:start_deps(),
     ok = ensure_db_absent(?COUCH_HOST, ?COUCH_DB),
     ok = application:load(database),
@@ -94,7 +99,7 @@ createdb_on_start_test_() ->
     {ok, Db} = couchbeam:open_db(Server, ?COUCH_DB),
     ViewsExists = couchbeam:doc_exists(Db, <<"_design/users">>),
     ok = database:stop_deps(),
-
+    ok = application:stop(folsom),
     [
         ?_assert(DatabaseCreated),
         ?_assert(ViewsExists)

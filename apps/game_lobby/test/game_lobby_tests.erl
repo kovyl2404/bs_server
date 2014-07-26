@@ -10,10 +10,12 @@
 fixture(Inst) ->
     {setup,
         fun() ->
+            ok = application:start(folsom),
             game_lobby:start()
         end,
         fun(_) ->
-            game_lobby:stop()
+            game_lobby:stop(),
+            ok = application:stop(folsom)
         end,
         Inst
     }.
@@ -33,9 +35,11 @@ before_test() ->
 application_start_stop_test_() ->
     {setup,
         fun() ->
-            ok = game_lobby:start_deps()
+            ok = game_lobby:start_deps(),
+            ok = application:start(folsom)
         end,
         fun(_) ->
+            ok = application:stop(folsom),
             ok = game_lobby:stop_deps()
         end,
         fun(_) ->

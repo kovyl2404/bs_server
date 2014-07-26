@@ -6,7 +6,8 @@
   {applications, [
                   kernel,
                   stdlib,
-		  couchbeam
+                  folsom,
+		          couchbeam
                  ]},
   {mod, { database, []}},
   {env, [

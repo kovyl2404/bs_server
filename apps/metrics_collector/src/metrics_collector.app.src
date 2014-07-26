@@ -1,6 +1,6 @@
 {application, metrics_collector,
  [
-  {description, "Periodicaly dumps folsom metrics in file"},
+  {description, "Periodicaly dumps folsom metrics to file"},
   {vsn, "0.0.0.1"},
   {registered, []},
   {applications, [
@@ -10,7 +10,11 @@
                  ]},
   {mod, { metrics_collector, []}},
   {env, [
-      {dump_interval_sec, 60},
-      {dump_path, "./metrics/all"}
+      {metrics_update_interval, 60},
+      {metrics_path, "./metrics/"},
+      {metrics_tags, [
+          {database, "database"},
+          {game_lobby, "game_lobby"}
+      ]}
   ]}
  ]}.

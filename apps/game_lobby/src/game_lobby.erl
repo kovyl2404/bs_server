@@ -4,6 +4,8 @@
 
 -author("Viacheslav V. Kovalev").
 
+-include_lib("game_lobby/include/metrics.hrl").
+
 %% Interface functions
 -export([
     checkin/2,
@@ -42,6 +44,7 @@ cancel(Token) ->
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
+    ok = init_metrics(),
     game_lobby_sup:start_link().
 
 stop(_State) ->
@@ -65,4 +68,21 @@ start() ->
 stop() ->
     ok = application:stop(game_lobby),
     ok = stop_deps().
+
+init_metrics() ->
+    ok = folsom_metrics:new_counter(?RUNNING_GAMES_METRIC),
+    ok = folsom_metrics:new_meter(?START_GAME_REQUESTS_METRIC),
+    ok = folsom_metrics:new_meter(?CANCELLED_GAMES_METRIC),
+    ok = folsom_metrics:new_meter(?CANCELLED_WAITING_GAMES_METRIC),
+    ok = folsom_metrics:new_meter(?SUCCEEDED_RECONNECTIONS_METRIC),
+    ok = folsom_metrics:new_meter(?FAILED_RECONNECTIONS_METRIC),
+    ok = folsom_metrics:new_meter(?TIMEDOUT_GAMES_METRIC),
+
+    ok = folsom_metrics:tag_metric(?RUNNING_GAMES_METRIC, ?GAME_LOBBY_METRICS),
+    ok = folsom_metrics:tag_metric(?START_GAME_REQUESTS_METRIC, ?GAME_LOBBY_METRICS),
+    ok = folsom_metrics:tag_metric(?CANCELLED_GAMES_METRIC, ?GAME_LOBBY_METRICS),
+    ok = folsom_metrics:tag_metric(?CANCELLED_WAITING_GAMES_METRIC, ?GAME_LOBBY_METRICS),
+    ok = folsom_metrics:tag_metric(?SUCCEEDED_RECONNECTIONS_METRIC, ?GAME_LOBBY_METRICS),
+    ok = folsom_metrics:tag_metric(?FAILED_RECONNECTIONS_METRIC, ?GAME_LOBBY_METRICS),
+    ok = folsom_metrics:tag_metric(?TIMEDOUT_GAMES_METRIC, ?GAME_LOBBY_METRICS).
 
