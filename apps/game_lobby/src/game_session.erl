@@ -249,7 +249,7 @@ handle_cast(
         peer_labels = [{_, FirstLabel}, {_, SecondLabel}]
     } = State
 ) ->
-    ?INFO("Game of ~p vs. ~p cancelled by peer",[Token, FirstLabel, SecondLabel]),
+    ?INFO("Game ~p of ~p vs. ~p cancelled by peer",[Token, FirstLabel, SecondLabel]),
     [ send_safe(P, #game_stop{ session_pid = self(), token = Token, tag = T }) || {T, P} <- PeerTags ],
     {stop, normal, State};
 

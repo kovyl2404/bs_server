@@ -27,7 +27,15 @@ cleanup(_) ->
     ok = application:stop(ranch).
 
 before_test() ->
-    error_logger:tty(false).
+    ok = application:start(compiler),
+    ok = application:start(syntax_tools),
+    ok = application:start(goldrush),
+    ok = application:load(lager),
+    ok = application:set_env(lager, handlers, [
+        {lager_file_backend, [{file, "../../../test_log/client_connection_tests.log"}]}
+    ]),
+    ok = application:set_env(lager, error_logger_hwm, 1000),
+    ok = application:start(lager).
 
 
 accept_connection_test_() ->
@@ -157,5 +165,12 @@ wait_ping(Socket, Timeout) ->
         {error, timeout}
     end.
 
+
 after_test() ->
-    error_logger:tty(false).
+    ok = application:stop(lager),
+    ok = application:unload(lager),
+    ok = application:stop(goldrush),
+    ok = application:stop(syntax_tools),
+    ok = application:stop(compiler).
+
+

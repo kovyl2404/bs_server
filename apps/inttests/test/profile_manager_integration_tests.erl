@@ -5,7 +5,15 @@
 -include_lib("eunit/include/eunit.hrl").
 
 before_test() ->
-    ok = error_logger:tty(false),
+    ok = application:start(compiler),
+    ok = application:start(syntax_tools),
+    ok = application:start(goldrush),
+    ok = application:load(lager),
+    ok = application:set_env(lager, handlers, [
+        {lager_file_backend, [{file, "../../../test_log/profile_manager_integration_tests.log"}]}
+    ]),
+    ok = application:set_env(lager, error_logger_hwm, 1000),
+    ok = application:start(lager),
     ok = database:start(),
     ok = database:reinitialize(),
     ok = application:start(game_lobby),
@@ -120,4 +128,8 @@ after_test() ->
     ok = application:stop(ranch),
     ok = application:stop(game_lobby),
     ok = database:stop(),
-    ok = error_logger:tty(true).
+    ok = application:stop(lager),
+    ok = application:unload(lager),
+    ok = application:stop(goldrush),
+    ok = application:stop(syntax_tools),
+    ok = application:stop(compiler).

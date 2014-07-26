@@ -7,6 +7,17 @@
 -define(COUCH_DB, "test").
 
 
+before_test() ->
+    ok = application:start(compiler),
+    ok = application:start(syntax_tools),
+    ok = application:start(goldrush),
+    ok = application:load(lager),
+    ok = application:set_env(lager, handlers, [
+        {lager_file_backend, [{file, "../../../test_log/database_tests.log"}]}
+    ]),
+    ok = application:set_env(lager, error_logger_hwm, 1000),
+    ok = application:start(lager).
+
 fixture(Inst) ->
     {setup,
         fun setup/0,
@@ -263,7 +274,12 @@ empty_top_test_() ->
         end
     ).
 
-
+after_test() ->
+    ok = application:stop(lager),
+    ok = application:unload(lager),
+    ok = application:stop(goldrush),
+    ok = application:stop(syntax_tools),
+    ok = application:stop(compiler).
 
 ensure_db_present(Host, Database) ->
     Server = couchbeam:server_connection(Host),
