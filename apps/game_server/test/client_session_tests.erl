@@ -9,6 +9,7 @@
 fixture(Inst) ->
     {setup,
         fun() ->
+            ok = application:start(folsom),
             ok = game_lobby:start(),
             ok = meck:new(mock_session_writer, [passthrough]),
             ok = application:load(game_server),
@@ -17,7 +18,8 @@ fixture(Inst) ->
         fun(_) ->
             ok = application:unload(game_server),
             ok = meck:unload(mock_session_writer),
-            ok = game_lobby:stop()
+            ok = game_lobby:stop(),
+            ok = application:stop(folsom)
         end,
         Inst
     }.

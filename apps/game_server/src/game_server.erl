@@ -5,6 +5,7 @@
 -behaviour(application).
 
 -include_lib("game_server/include/logging.hrl").
+-include_lib("game_server/include/metrics.hrl").
 
 -define(
     CLIENT_SESSION_DEPS,
@@ -38,6 +39,7 @@ stop() ->
     ok = stop_deps().
 
 start(_StartType, _StartArgs) ->
+    ok = init_metrics(),
     TransportOptions = transport_options(),
     StartResult =
         ranch:start_listener(
@@ -87,3 +89,15 @@ connection_options() ->
         {ping_interval_sec, PingIntervalSec},
         {max_pings_allowed, MaxPingsAllowed}
     ].
+
+
+init_metrics() ->
+    ok = folsom_metrics:new_counter(?GAME_SERVER_CONNECTIONS_METRIC),
+    ok = folsom_metrics:new_counter(?GAME_SERVER_GUEST_CONNECTIONS_METRIC),
+    ok = folsom_metrics:new_counter(?GAME_SERVER_AUTHENTICATED_CONNECTIONS_METRIC),
+    ok = folsom_metrics:new_meter(?GAME_SERVER_PROTOCOL_VIOLATIONS),
+
+    ok = folsom_metrics:tag_metric(?GAME_SERVER_CONNECTIONS_METRIC, ?GAME_SERVER_METRICS),
+    ok = folsom_metrics:tag_metric(?GAME_SERVER_GUEST_CONNECTIONS_METRIC, ?GAME_SERVER_METRICS),
+    ok = folsom_metrics:tag_metric(?GAME_SERVER_AUTHENTICATED_CONNECTIONS_METRIC, ?GAME_SERVER_METRICS),
+    ok = folsom_metrics:tag_metric(?GAME_SERVER_PROTOCOL_VIOLATIONS, ?GAME_SERVER_METRICS).

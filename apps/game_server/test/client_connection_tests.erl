@@ -19,10 +19,12 @@ setup() ->
     ok = application:set_env(game_server, port, 7891),
     ok = application:set_env(game_server, max_pings_allowed, 5),
     ok = application:set_env(game_server, ping_interval_sec, 1),
+    ok = application:start(folsom),
     ok = application:start(game_server).
 
 cleanup(_) ->
     ok = application:stop(game_server),
+    ok = application:stop(folsom),
     ok = application:unload(game_server),
     ok = application:stop(ranch).
 

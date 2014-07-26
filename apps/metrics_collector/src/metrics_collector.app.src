@@ -14,7 +14,8 @@
       {metrics_path, "./metrics/"},
       {metrics_tags, [
           {database, "database"},
-          {game_lobby, "game_lobby"}
+          {game_lobby, "game_lobby"},
+          {game_server, "game_server"}
       ]}
   ]}
  ]}.

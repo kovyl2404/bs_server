@@ -7,6 +7,7 @@
 -include_lib("game_server/include/logging.hrl").
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("game_server/include/metrics.hrl").
 
 -export([
     start/2,
@@ -73,6 +74,8 @@ init({Socket, Transport, PeerName}) ->
             undefined -> idle;
             _ -> guest
         end,
+    folsom_metrics:notify({?GAME_SERVER_CONNECTIONS_METRIC, {inc, 1}}),
+    folsom_metrics:notify({?GAME_SERVER_GUEST_CONNECTIONS_METRIC, {inc, 1}}),
     {ok, InitState, #state{
         profile_backend = ProfileBackend,
         socket = Socket,
@@ -127,6 +130,8 @@ guest(
                         ]
 
                     ),
+                    folsom_metrics:notify({?GAME_SERVER_GUEST_CONNECTIONS_METRIC, {dec, 1}}),
+                    folsom_metrics:notify({?GAME_SERVER_AUTHENTICATED_CONNECTIONS_METRIC, {inc, 1}}),
                     {next_state, idle, State#state{ peer_name = <<"login">>}};
                 {error, not_found} ->
                     ?ERROR("Client session ~p failed authentication",[self()]),
@@ -519,9 +524,25 @@ handle_info(
 code_change(_OldVsn, StateName, StateData, _Extra) ->
     {ok, StateName, StateData}.
 
-terminate( _, _, _ ) ->
+terminate( Reason, guest, _ ) ->
+    folsom_metrics:notify({?GAME_SERVER_GUEST_CONNECTIONS_METRIC, {dec, 1}}),
+    folsom_metrics:notify({?GAME_SERVER_CONNECTIONS_METRIC, {dec, 1}}),
+    handle_terminate_reason(Reason),
+    ok;
+terminate( Reason, _, _ ) ->
+    folsom_metrics:notify({?GAME_SERVER_AUTHENTICATED_CONNECTIONS_METRIC, {dec, 1}}),
+    folsom_metrics:notify({?GAME_SERVER_CONNECTIONS_METRIC, {dec, 1}}),
+    handle_terminate_reason(Reason),
     ok.
 
+handle_terminate_reason(not_auth) ->
+    folsom_metrics:notify({?GAME_SERVER_PROTOCOL_VIOLATIONS, 1});
+handle_terminate_reason(protocol_violation) ->
+    folsom_metrics:notify({?GAME_SERVER_PROTOCOL_VIOLATIONS, 1});
+handle_terminate_reason(reconnection_token_corrupted) ->
+    folsom_metrics:notify({?GAME_SERVER_PROTOCOL_VIOLATIONS, 1});
+handle_terminate_reason(_) ->
+    ok.
 
 turn_flag(true) -> 1;
 turn_flag(false) -> 0.

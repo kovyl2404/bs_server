@@ -112,9 +112,14 @@ dump_to_file(Values, Dumpfile) ->
 
 format_values([], Acc) ->
     lists:reverse(Acc);
-format_values([{MetricName, Values} | Rest], Acc) ->
+format_values([{MetricName, Values} | Rest], Acc) when is_list(Values) ->
     Count = proplists:get_value(count, Values),
     format_values(
         Rest,
         [ io_lib:format("~s.count = ~p~n", [MetricName, Count]) | Acc]
+    );
+format_values([{MetricName, Value} | Rest], Acc) when is_number(Value) ->
+    format_values(
+        Rest,
+        [ io_lib:format("~s.count = ~p~n", [MetricName, Value]) | Acc]
     ).

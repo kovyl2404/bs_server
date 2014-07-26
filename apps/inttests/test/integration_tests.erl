@@ -15,6 +15,7 @@ before_test() ->
     ]),
     ok = application:set_env(lager, error_logger_hwm, 1000),
     ok = application:start(lager),
+    ok = application:start(folsom),
     ok = application:start(game_lobby),
     ok = application:start(ranch),
     ok = application:start(game_server).
@@ -226,7 +227,7 @@ after_test() ->
     ok = application:stop(game_server),
     ok = application:stop(ranch),
     ok = application:stop(game_lobby),
-    ok = error_logger:tty(true),
+    ok = application:stop(folsom),
     ok = application:stop(lager),
     ok = application:unload(lager),
     ok = application:stop(goldrush),
