@@ -95,7 +95,7 @@ update_profile_test_() ->
             Res = lobby_utils:wait_from_pid(Emulator, 1000),
             ExpectedProfile = orddict:from_list([
                 {<<"rank">>, 2},
-                {<<"score">>, 0},
+                {<<"score">>, 5},
                 {<<"achievements">>, [1,2,3,4,5,6,7,8]},
                 {<<"reserved1">>, 0},
                 {<<"reserved2">>, 0},
