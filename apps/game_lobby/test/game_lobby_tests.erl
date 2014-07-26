@@ -6,6 +6,7 @@
 
 -include_lib("game_lobby/include/common.hrl").
 
+
 fixture(Inst) ->
     {setup,
         fun() ->
@@ -19,7 +20,15 @@ fixture(Inst) ->
 
 
 before_test() ->
-    error_logger:tty(false).
+    ok = application:start(compiler),
+    ok = application:start(syntax_tools),
+    ok = application:start(goldrush),
+    ok = application:load(lager),
+    ok = application:set_env(lager, handlers, [
+        {lager_file_backend, [{file, "../../../test_log/game_lobby_tests.log"}]}
+    ]),
+    ok = application:set_env(lager, error_logger_hwm, 1000),
+    ok = application:start(lager).
 
 application_start_stop_test_() ->
     {setup,
@@ -273,5 +282,10 @@ reconnect_to_expired_game_test_() ->
 
 
 after_test() ->
-    error_logger:tty(true).
+    ok = application:stop(lager),
+    ok = application:unload(lager),
+    ok = application:stop(goldrush),
+    ok = application:stop(syntax_tools),
+    ok = application:stop(compiler).
+
 

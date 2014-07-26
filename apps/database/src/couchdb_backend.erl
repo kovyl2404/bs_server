@@ -46,7 +46,7 @@ init(Params) ->
             {ok, Db};
         Error ->
             ?CRITICAL("Could not operate with couchdb-server ~p, database ~p because of ~p",[Server, DbName, Error]),
-            Error
+            couchbeam:open_db(Server, DbName)
     end.
 
 

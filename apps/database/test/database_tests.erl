@@ -7,6 +7,17 @@
 -define(COUCH_DB, "test").
 
 
+before_test() ->
+    ok = application:start(compiler),
+    ok = application:start(syntax_tools),
+    ok = application:start(goldrush),
+    ok = application:load(lager),
+    ok = application:set_env(lager, handlers, [
+        {lager_file_backend, [{file, "../../../test_log/database_tests.log"}]}
+    ]),
+    ok = application:set_env(lager, error_logger_hwm, 1000),
+    ok = application:start(lager).
+
 fixture(Inst) ->
     {setup,
         fun setup/0,
@@ -47,13 +58,20 @@ no_server_test_() ->
         ]
     ),
     StartResult = application:start(database),
+    FailRegister = database:register(<<"user">>, <<"123">>),
+    FailLogin = database:register(<<"user">>, <<"123">>),
+    FailUpdate = database:update_profile(<<"used">>, []),
     StopResult = application:stop(database),
+
 
     ok = application:unload(database),
     ok = database:stop_deps(),
     [
-        ?_assertMatch({error, _}, StartResult),
-        ?_assertMatch({error, _}, StopResult)
+        ?_assertMatch(ok, StartResult),
+        ?_assertMatch(ok, StopResult),
+        ?_assertEqual({error, econnrefused}, FailLogin),
+        ?_assertEqual({error, econnrefused}, FailUpdate),
+        ?_assertEqual({error, econnrefused}, FailRegister)
     ].
 
 createdb_on_start_test_() ->
@@ -210,7 +228,7 @@ update_profile_test_() ->
                 ?_assertEqual(UpdatedProfile, ActualProfile),
                 ?_assertEqual(10, proplists:get_value(<<"rank">>, ActualProfile)),
                 ?_assertEqual([1,2,3,4,5,6,7,8], proplists:get_value(<<"achievements">>, ActualProfile)),
-                ?_assertEqual(0, proplists:get_value(<<"score">>, ActualProfile))
+                ?_assertEqual(100500, proplists:get_value(<<"score">>, ActualProfile))
             ]
         end
     ).
@@ -256,7 +274,12 @@ empty_top_test_() ->
         end
     ).
 
-
+after_test() ->
+    ok = application:stop(lager),
+    ok = application:unload(lager),
+    ok = application:stop(goldrush),
+    ok = application:stop(syntax_tools),
+    ok = application:stop(compiler).
 
 ensure_db_present(Host, Database) ->
     Server = couchbeam:server_connection(Host),

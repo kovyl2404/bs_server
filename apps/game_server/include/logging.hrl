@@ -9,5 +9,5 @@
 
 -define(WARNING(Message, Args), lager:warning(Message, Args)).
 -define(CRITICAL(Message, Args), lager:critical(Message, Args)).
-
+-define(ERROR(Message, Args), lager:error(Message, Args)).
 -endif.

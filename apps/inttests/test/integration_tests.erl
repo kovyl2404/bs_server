@@ -6,7 +6,15 @@
 -include_lib("game_server/include/client_protocol.hrl").
 
 before_test() ->
-    ok = error_logger:tty(false),
+    ok = application:start(compiler),
+    ok = application:start(syntax_tools),
+    ok = application:start(goldrush),
+    ok = application:load(lager),
+    ok = application:set_env(lager, handlers, [
+        {lager_file_backend, [{file, "../../../test_log/integration_tests.log"}]}
+    ]),
+    ok = application:set_env(lager, error_logger_hwm, 1000),
+    ok = application:start(lager),
     ok = application:start(game_lobby),
     ok = application:start(ranch),
     ok = application:start(game_server).
@@ -72,7 +80,7 @@ game_reconnect_test_() ->
                                     ?_assertMatch({ok, game_stop}, GameStopResult1),
                                     ?_assertMatch({ok, game_stop}, GameStopResult2)
                                 ]
-                            end, [], lists:seq(1, 1000)
+                            end, [], lists:seq(1, 50)
                         )
                     end
                 ),
@@ -115,7 +123,7 @@ game_start_stop_test_() ->
                                     ?_assertMatch({ok, game_stop}, SecondClientGameStop)
                                 ],
                                 Acc ++ Tests
-                            end, [], lists:seq(1, 500)
+                            end, [], lists:seq(1, 50)
                         )
                     end
                 ),
@@ -161,7 +169,7 @@ game_play_test_() ->
                                     )
                                 ],
                                 Acc ++ Tests
-                            end, [], lists:seq(1, 500)
+                            end, [], lists:seq(1, 50)
                         )
                     end
                 ),
@@ -218,4 +226,9 @@ after_test() ->
     ok = application:stop(game_server),
     ok = application:stop(ranch),
     ok = application:stop(game_lobby),
-    ok = error_logger:tty(true).
+    ok = error_logger:tty(true),
+    ok = application:stop(lager),
+    ok = application:unload(lager),
+    ok = application:stop(goldrush),
+    ok = application:stop(syntax_tools),
+    ok = application:stop(compiler).

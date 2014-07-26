@@ -5,8 +5,17 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("game_lobby/include/common.hrl").
 
-%% before_test() ->
-%%     error_logger:tty(false).
+
+before_test() ->
+    ok = application:start(compiler),
+    ok = application:start(syntax_tools),
+    ok = application:start(goldrush),
+    ok = application:load(lager),
+    ok = application:set_env(lager, handlers, [
+        {lager_file_backend, [{file, "../../../test_log/game_session_tests.log"}]}
+    ]),
+    ok = application:set_env(lager, error_logger_hwm, 1000),
+    ok = application:start(lager).
 
 start_game_session_test_() ->
     TestProc = self(),
@@ -504,4 +513,10 @@ peer_surrender_and_reconnects_test_() ->
     ].
 
 after_test() ->
-    error_logger:tty(true).
+    ok = application:stop(lager),
+    ok = application:unload(lager),
+    ok = application:stop(goldrush),
+    ok = application:stop(syntax_tools),
+    ok = application:stop(compiler).
+
+
