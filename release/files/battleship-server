@@ -20,16 +20,21 @@ RUNNER_SCRIPT_DIR=$(cd ${0%/*} && pwd -P)
 CALLER_DIR=$PWD
 
 RUNNER_BASE_DIR=${RUNNER_SCRIPT_DIR%/*}
-echo Runner dir is ${RUNNER_BASE_DIR}
 RUNNER_ETC_DIR=$RUNNER_BASE_DIR/etc
 # Note the trailing slash on $PIPE_DIR/
 PIPE_DIR=/tmp/$RUNNER_BASE_DIR/
 
-RUNNER_USER=
+# Identify the script name
+SCRIPT=`basename $0`
 
-[ -e "/etc/default/battleship-server" ] && . /etc/default/battleship-server
+RUNNER_USER=
+if [ -e "/etc/default/$SCRIPT" ]; then
+	. "/etc/default/$SCRIPT"
+fi
+echo "$RUNNER_USER"
 
 WHOAMI=$(whoami)
+
 
 # Make sure this script is running as the appropriate user
 if ([ "$RUNNER_USER" ] && [ "x$WHOAMI" != "x$RUNNER_USER" ]); then
@@ -42,25 +47,30 @@ if ([ "$RUNNER_USER" ] && [ "x$WHOAMI" != "x$RUNNER_USER" ]); then
     exec sudo -H -u $RUNNER_USER -i $RUNNER_SCRIPT_DIR/$RUNNER_SCRIPT $@
 fi
 
-# Identify the script name
-SCRIPT=`basename $0`
 
 # Parse out release and erts info
 START_ERL=`cat $RUNNER_BASE_DIR/releases/start_erl.data`
 ERTS_VSN=${START_ERL% *}
 APP_VSN=${START_ERL#* }
 
+SYSTEM_ETC_DIR="/etc/$SCRIPT"
+
 # Use $CWD/vm.args if exists, otherwise releases/APP_VSN/vm.args, or
 # else etc/vm.args
-if [ -e "$CALLER_DIR/vm.args" ]; then
-    VMARGS_PATH=$CALLER_DIR/vm.args
-    USE_DIR=$CALLER_DIR
+if [ -e "$SYSTEM_ETC_DIR/vm.args" ]; then
+    VMARGS_PATH="$SYSTEM_ETC_DIR/vm.args"
+    USE_DIR=$HOME
 else
-    USE_DIR=$RUNNER_BASE_DIR
-    if [ -e "$RUNNER_BASE_DIR/releases/$APP_VSN/vm.args" ]; then
-        VMARGS_PATH="$RUNNER_BASE_DIR/releases/$APP_VSN/vm.args"
+    if [ -e "$CALLER_DIR/vm.args" ]; then
+        VMARGS_PATH=$CALLER_DIR/vm.args
+        USE_DIR=$CALLER_DIR
     else
-        VMARGS_PATH="$RUNNER_ETC_DIR/vm.args"
+        USE_DIR=$RUNNER_BASE_DIR
+        if [ -e "$RUNNER_BASE_DIR/releases/$APP_VSN/vm.args" ]; then
+            VMARGS_PATH="$RUNNER_BASE_DIR/releases/$APP_VSN/vm.args"
+        else
+            VMARGS_PATH="$RUNNER_ETC_DIR/vm.args"
+        fi
     fi
 fi
 
@@ -68,16 +78,20 @@ RUNNER_LOG_DIR=$USE_DIR/log
 # Make sure log directory exists
 mkdir -p $RUNNER_LOG_DIR
 
-# Use releases/VSN/app.config if it exists otherwise use etc/app.config
-if [ -e "$USE_DIR/app.config" ]; then
-    CONFIG_PATH="$USE_DIR/app.config"
+if [ -e "$SYSTEM_ETC_DIR/app.config" ]; then
+    CONFIG_PATH="$SYSTEM_ETC_DIR/app.config"
 else
-    if [ -e "$RUNNER_BASE_DIR/releases/$APP_VSN/app.config" ]; then
-        CONFIG_PATH="$RUNNER_BASE_DIR/releases/$APP_VSN/app.config"
+    if [ -e "$USE_DIR/app.config" ]; then
+        CONFIG_PATH="$USE_DIR/app.config"
     else
-        CONFIG_PATH="$RUNNER_ETC_DIR/app.config"
+        if [ -e "$RUNNER_BASE_DIR/releases/$APP_VSN/app.config" ]; then
+            CONFIG_PATH="$RUNNER_BASE_DIR/releases/$APP_VSN/app.config"
+        else
+            CONFIG_PATH="$RUNNER_ETC_DIR/app.config"
+        fi
     fi
 fi
+
 
 # Extract the target node name from node.args
 NAME_ARG=`egrep '^\-s?name' $VMARGS_PATH`
@@ -166,6 +180,8 @@ case "$1" in
         HEART_COMMAND="$RUNNER_BASE_DIR/bin/$SCRIPT $HEART_OPTION $RUN_PARAM"
         export HEART_COMMAND
         mkdir -p $PIPE_DIR
+	echo "Start options are $START_OPTION"
+	echo "Run params are $RUN_PARAM"
         $ERTS_PATH/run_erl -daemon $PIPE_DIR $RUNNER_LOG_DIR "exec $RUNNER_BASE_DIR/bin/$SCRIPT $START_OPTION $RUN_PARAM" 2>&1
         ;;
 
