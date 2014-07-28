@@ -1,5 +1,8 @@
 .PHONY: get-deps compile int_tests unit_tests all_tests release clean
 
+release: compile
+	rebar generate
+
 get-deps:
 	./rebar get-deps
 
@@ -15,8 +18,6 @@ unit_tests: compile
 
 all_tests: unit_tests, int_tests
 
-release: compile
-	rebar generate
 
 clean:
 	rebar clean
