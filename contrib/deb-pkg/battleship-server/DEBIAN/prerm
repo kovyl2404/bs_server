@@ -1,0 +1,7 @@
+
+if [ -x "/etc/init.d/battleship-server" ]; then
+	invoke-rc.d battleship-server stop > /dev/null
+	update-rc.d battleship-server remove > /dev/null
+fi
+
+exit 0

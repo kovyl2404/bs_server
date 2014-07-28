@@ -1,0 +1,9 @@
+Package: battleship-server
+Version: 1.0.0-1 
+Section: extra
+Priority: optional
+Architecture: amd64
+Installed-Size:i 31744
+Maintainer: Viacheslav V. Kovalev <kovyl2404@gmail.com>
+Description: Battleship gaming server written in erlang
+

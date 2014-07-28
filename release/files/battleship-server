@@ -27,26 +27,6 @@ PIPE_DIR=/tmp/$RUNNER_BASE_DIR/
 # Identify the script name
 SCRIPT=`basename $0`
 
-RUNNER_USER=
-if [ -e "/etc/default/$SCRIPT" ]; then
-	. "/etc/default/$SCRIPT"
-fi
-echo "$RUNNER_USER"
-
-WHOAMI=$(whoami)
-
-
-# Make sure this script is running as the appropriate user
-if ([ "$RUNNER_USER" ] && [ "x$WHOAMI" != "x$RUNNER_USER" ]); then
-    type sudo > /dev/null 2>&1
-    if [ $? -ne 0 ]; then
-        echo "sudo doesn't appear to be installed and your EUID isn't $RUNNER_USER" 1>&2
-        exit 1
-    fi
-    echo "Attempting to restart script through sudo -H -u $RUNNER_USER" >&2
-    exec sudo -H -u $RUNNER_USER -i $RUNNER_SCRIPT_DIR/$RUNNER_SCRIPT $@
-fi
-
 
 # Parse out release and erts info
 START_ERL=`cat $RUNNER_BASE_DIR/releases/start_erl.data`
@@ -180,8 +160,6 @@ case "$1" in
         HEART_COMMAND="$RUNNER_BASE_DIR/bin/$SCRIPT $HEART_OPTION $RUN_PARAM"
         export HEART_COMMAND
         mkdir -p $PIPE_DIR
-	echo "Start options are $START_OPTION"
-	echo "Run params are $RUN_PARAM"
         $ERTS_PATH/run_erl -daemon $PIPE_DIR $RUNNER_LOG_DIR "exec $RUNNER_BASE_DIR/bin/$SCRIPT $START_OPTION $RUN_PARAM" 2>&1
         ;;
 

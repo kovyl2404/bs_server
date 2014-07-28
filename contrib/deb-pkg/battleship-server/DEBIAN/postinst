@@ -1,0 +1,23 @@
+#! /bin/bash
+
+if ! getent group battleship-server >/dev/null; then
+    addgroup --system battleship-server
+fi
+ 
+if ! getent passwd battleship-server >/dev/null; then
+    adduser --system --ingroup battleship-server --home /opt/battleship-server \
+	--shell "/bin/bash" \
+        --no-create-home --gecos "Battleship gaming server" \
+        battleship-server
+fi
+
+
+chown -R battleship-server:battleship-server /opt/battleship-server
+chown -R battleship-server:battleship-server /etc/battleship-server
+
+if [ -x /etc/init.d/battleship-server ]; then
+	update-rc.d battleship-server defaults > /dev/null
+	invoke-rc.d battleship-server start
+fi
+
+exit 0
