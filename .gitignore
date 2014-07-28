@@ -12,3 +12,4 @@ log/
 *.dump
 test_log/
 release/battleship-server/
+.rebar
