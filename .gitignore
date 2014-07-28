@@ -11,3 +11,4 @@ log/
 *.swp
 *.dump
 test_log/
+release/battleship-server/
