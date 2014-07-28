@@ -13,6 +13,10 @@
     reinitialize/0
 ]).
 
+-compile([
+	{parse_transform, lager_transform}
+]).
+
 -define(DATABASE_METRICS, ?MODULE).
 
 -define(GET_TOP_METRIC, "database.get_top").
