@@ -529,8 +529,18 @@ terminate( Reason, guest, _ ) ->
     folsom_metrics:notify({?GAME_SERVER_CONNECTIONS_METRIC, {dec, 1}}),
     handle_terminate_reason(Reason),
     ok;
-terminate( Reason, _, _ ) ->
-    folsom_metrics:notify({?GAME_SERVER_AUTHENTICATED_CONNECTIONS_METRIC, {dec, 1}}),
+terminate(
+    Reason, _,
+    #state{
+        profile_backend = ProfileBackend
+    }
+) ->
+    case ProfileBackend of
+        undefined ->
+            folsom_metrics:notify({?GAME_SERVER_GUEST_CONNECTIONS_METRIC, {dec, 1}});
+        _ ->
+            folsom_metrics:notify({?GAME_SERVER_AUTHENTICATED_CONNECTIONS_METRIC, {dec, 1}})
+    end,
     folsom_metrics:notify({?GAME_SERVER_CONNECTIONS_METRIC, {dec, 1}}),
     handle_terminate_reason(Reason),
     ok.
