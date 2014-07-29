@@ -9,6 +9,8 @@
 -include_lib("game_lobby/include/logging.hrl").
 -include_lib("game_lobby/include/metrics.hrl").
 
+-define(DEFAULT_RECONNECT_TIMEOUT, 2000).   
+
 %% API
 -export([
     start_link/3,
@@ -339,5 +341,8 @@ handle_turn_violation(ActualPeerTag, FailedPeerTag, PeerTags) ->
     TimerId.
 
 reconnect_timeout() ->
-    {ok, Value} = application:get_env(game_lobby, game_reconnect_timeout_sec),
-    trunc(Value*1000).
+    case application:get_env(game_lobby, game_reconnect_timeout_sec) of
+        {ok, Value} ->
+            trunc(Value*1000);
+        _ -> ?DEFAULT_RECONNECT_TIMEOUT
+    end.
