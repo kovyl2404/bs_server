@@ -37,7 +37,8 @@ case "$1" in
 	;;
 	attach)
 		su $RUNNER_USER -c "$DAEMON attach"
-		exhit $?
+		exit $?
+	;;
 	*)
 		echo "Unexpected action $1"
 		exit 1
