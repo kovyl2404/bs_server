@@ -35,6 +35,9 @@ case "$1" in
 		su $RUNNER_USER -c "$DAEMON ping"
 		exit $?
 	;;
+	attach)
+		su $RUNNER_USER -c "$DAEMON attach"
+		exhit $?
 	*)
 		echo "Unexpected action $1"
 		exit 1
