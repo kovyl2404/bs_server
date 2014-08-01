@@ -63,10 +63,12 @@ stop_deps() ->
 
 start() ->
     ok = start_deps(),
+    ok = application:load(game_lobby),
     ok = application:start(game_lobby).
 
 stop() ->
     ok = application:stop(game_lobby),
+    ok = application:unload(game_lobby),
     ok = stop_deps().
 
 init_metrics() ->

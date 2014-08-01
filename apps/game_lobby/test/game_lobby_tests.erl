@@ -43,11 +43,12 @@ application_start_stop_test_() ->
             ok = game_lobby:stop_deps()
         end,
         fun(_) ->
+            ok = application:load(game_lobby),
             Started = application:start(game_lobby),
             Children = supervisor:which_children(game_lobby_sup),
             IsLobbyAlive = is_process_alive(whereis(lobby_server)),
             Stopped = application:stop(game_lobby),
-
+            ok = application:unload(game_lobby),
             [
                 ?_assertEqual(ok, Started),
                 ?_assertEqual(ok, Stopped),
