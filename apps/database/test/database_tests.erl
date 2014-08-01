@@ -143,7 +143,7 @@ login_invalid_password_test_() ->
             {ok, _} = database:register(<<"kovyl">>, <<"qwerty">>),
             RegisterAgain = database:login(<<"kovyl">>, <<"ytrewq">>),
             [
-                ?_assertEqual({error, not_found}, RegisterAgain)
+                ?_assertEqual({error, incorrect_password}, RegisterAgain)
             ]
         end
     ).
@@ -159,56 +159,6 @@ get_profile_test_() ->
         end
     ).
 
-set_field_non_existent_profile_test_() ->
-    fixture(
-        fun(_) ->
-            Result = database:set_field(<<"rank">>, 1, <<"kovyl">>),
-            [
-                ?_assertEqual({error, not_found}, Result)
-            ]
-        end
-    ).
-
-set_field_existent_profile_test_() ->
-    fixture(
-        fun(_) ->
-            {ok, _Profile} = maybe_sort_list(database:register(<<"kovyl">>, <<"qwerty">>)),
-            {ok, NewProfile} = maybe_sort_list(database:set_field(<<"rank">>, 1, <<"kovyl">>)),
-            GetProfile = maybe_sort_list(database:get_by_id(<<"kovyl">>)),
-            NewRank = proplists:get_value(<<"rank">>, NewProfile),
-            [
-                ?_assertEqual({ok, NewProfile}, GetProfile),
-                ?_assertEqual(1, NewRank)
-            ]
-        end
-    ).
-
-increase_field_existent_profile_test_() ->
-    fixture(
-        fun(_) ->
-            {ok, _Profile} = maybe_sort_list(database:register(<<"kovyl">>, <<"qwerty">>)),
-            {ok, NewProfile} = maybe_sort_list(database:increase_field(<<"rank">>, <<"kovyl">>)),
-            GetProfile = maybe_sort_list(database:get_by_id(<<"kovyl">>)),
-            NewRank = proplists:get_value(<<"rank">>, NewProfile),
-            [
-                ?_assertEqual({ok, NewProfile}, GetProfile),
-                ?_assertEqual(1, NewRank)
-            ]
-        end
-    ).
-
-
-increase_field_non_existent_profile_test_() ->
-    fixture(
-        fun(_) ->
-            IncreaseResult = maybe_sort_list(database:increase_field(<<"rank">>, <<"kovyl">>)),
-            GetProfile = maybe_sort_list(database:get_by_id(<<"kovyl">>)),
-            [
-                ?_assertEqual({error, not_found}, IncreaseResult),
-                ?_assertEqual({error, not_found},    GetProfile)
-            ]
-        end
-    ).
 
 update_profile_test_() ->
     fixture(
@@ -228,7 +178,7 @@ update_profile_test_() ->
             PasswordChangeIgnored = database:login(<<"user1">>, <<"qwerty">>),
             {ok, ActualProfile} = database:get_by_id(<<"user1">>),
             [
-                ?_assertEqual({error, not_found}, PasswordChanged),
+                ?_assertEqual({error, incorrect_password}, PasswordChanged),
                 ?_assertMatch({ok, _}, PasswordChangeIgnored),
                 ?_assertEqual(UpdatedProfile, ActualProfile),
                 ?_assertEqual(10, proplists:get_value(<<"rank">>, ActualProfile)),

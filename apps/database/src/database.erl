@@ -8,7 +8,6 @@
     get_by_id/1,
     set_field/3,
     get_top/1,
-    increase_field/2,
     update_profile/2,
     reinitialize/0
 ]).
@@ -160,7 +159,7 @@ login(Login, Password) ->
                     {ok, Profile};
                 false ->
                     folsom_metrics:notify({?FAIL_LOGIN_METRIC, 1}),
-                    {error, not_found}
+                    {error, incorrect_password}
             end;
         Error ->
             folsom_metrics:notify({?BACKEND_ERROR_LOGIN_METRIC, 1}),
@@ -198,54 +197,19 @@ update_fields(Profile, NewProfileVersion) ->
         <<"reserved4">>, <<"reserved5">>, <<"reserved6">>,
         <<"reserved7">>, <<"score">>
     ],
-    lists:foldl(
-        fun(Field, Acc) ->
-            case lists:keyfind(Field, 1, NewProfileVersion) of
-                {_, Value} ->
-                    orddict:store(Field, Value, Acc);
-                _ ->
-                    Acc
-            end
-        end, SortedProfile, UpdateFields
-    ).
+    Tmp =
+        lists:foldl(
+            fun(Field, Acc) ->
+                case lists:keyfind(Field, 1, NewProfileVersion) of
+                    {_, Value} ->
+                        orddict:store(Field, Value, Acc);
+                    _ ->
+                        Acc
+                end
+            end, SortedProfile, UpdateFields
+        ),
+    orddict:store(<<"timestamp">>, unix_now_utc(), Tmp).
 
-
-
-set_field(Field, Value, Login) ->
-    {BackendModule, BackendState} = get_backend(),
-    case BackendModule:get_by_id(Login, BackendState) of
-        {error, not_found} ->
-            {error, not_found};
-        {ok, {Profile}} ->
-            NewProfile = [ {Field, Value} | proplists:delete(Field, Profile) ],
-            case BackendModule:create_profile( {NewProfile}, BackendState ) of
-                {ok, {Doc}} ->
-                    {ok, Doc};
-                {error, _} = Error ->
-                    Error
-            end;
-        Error ->
-            Error
-    end.
-
-increase_field(Field, Login) ->
-    ?DEBUG("Increasing field ~p for profile ~p in database",[Field, Login]),
-    {BackendModule, BackendState} = get_backend(),
-    case BackendModule:get_by_id(Login, BackendState) of
-        {error, not_found} ->
-            {error, not_found};
-        {ok, {Profile}} ->
-            OldFieldValue = proplists:get_value(Field, Profile),
-            NewProfile = [ {Field, OldFieldValue+1} | proplists:delete(Field, Profile) ],
-            case BackendModule:create_profile( {NewProfile}, BackendState ) of
-                {ok, {Doc}} ->
-                    {ok, Doc};
-                {error, _} = Error ->
-                    Error
-            end;
-        Error ->
-            Error
-    end.
 
 get_backend() ->
     [{backend, Result}] = ets:lookup(?MODULE, backend),
@@ -269,7 +233,8 @@ init_profile(Login, Password) ->
         {<<"reserved5">>, 0},
         {<<"reserved6">>, 0},
         {<<"reserved7">>, 0},
-        {<<"score">>, 0}
+        {<<"score">>, 0},
+        {<<"timestamp">>, unix_now_utc()}
     ]}.
 
 
@@ -359,3 +324,29 @@ hex(X) ->
             16#4545, 16#4546, 16#4630, 16#4631, 16#4632, 16#4633, 16#4634,
             16#4635, 16#4636, 16#4637, 16#4638, 16#4639, 16#4641, 16#4642,
             16#4643, 16#4644, 16#4645, 16#4646}).
+
+
+
+-define(EPOCH, 62167219200).
+
+unix_now_utc() ->
+    calendar:datetime_to_gregorian_seconds(calendar:universal_time()) - ?EPOCH.
+
+
+%% Only for TEST purposes
+set_field(Field, Value, Login) ->
+    {BackendModule, BackendState} = get_backend(),
+    case BackendModule:get_by_id(Login, BackendState) of
+        {error, not_found} ->
+            {error, not_found};
+        {ok, {Profile}} ->
+            NewProfile = [ {Field, Value} | proplists:delete(Field, Profile) ],
+            case BackendModule:create_profile( {NewProfile}, BackendState ) of
+                {ok, {Doc}} ->
+                    {ok, Doc};
+                {error, _} = Error ->
+                    Error
+            end;
+        Error ->
+            Error
+    end.

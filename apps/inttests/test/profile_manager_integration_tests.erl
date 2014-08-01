@@ -46,10 +46,10 @@ register_test_() ->
             ok = client_emulator:stop(AnotherEmulator),
 
             [
-                ?_assertEqual({ok, {register, true}}, RegisterOk),
+                ?_assertEqual({ok, {register, ok}}, RegisterOk),
                 ?_assertMatch({ok, _}, Profile),
                 ?_assertEqual(Profile, Profile2),
-                ?_assertEqual({ok, {login, true}}, LoginOk)
+                ?_assertEqual({ok, {login, ok}}, LoginOk)
             ]
         end
     }.
@@ -75,7 +75,7 @@ already_registered_test_() ->
             ok = client_emulator:stop(AnotherEmulator),
 
             [
-                ?_assertEqual({ok, {register, false}}, RegisterFail),
+                ?_assertEqual({ok, {register, incorrect_login}}, RegisterFail),
                 ?_assertEqual({error, timeout}, NoProfile)
             ]
         end
@@ -92,7 +92,7 @@ update_profile_test_() ->
         end,
         fun(Emulator) ->
             ok = client_emulator:register(Emulator, <<"user3">>, <<"qwerty">>),
-            {ok, {register, true}} = lobby_utils:wait_from_pid(Emulator, 1000),
+            {ok, {register, ok}} = lobby_utils:wait_from_pid(Emulator, 1000),
             {ok, {profile, RawProfile}} = lobby_utils:wait_from_pid(Emulator, 1000),
             Profile = orddict:from_list(RawProfile),
             UpdatedProfile1 = orddict:store(<<"rank">>, 2, Profile),
@@ -102,21 +102,8 @@ update_profile_test_() ->
             ok = client_emulator:update_profile(Emulator, UpdatedProfile),
 
             Res = lobby_utils:wait_from_pid(Emulator, 1000),
-            ExpectedProfile = orddict:from_list([
-                {<<"rank">>, 2},
-                {<<"score">>, 5},
-                {<<"achievements">>, [1,2,3,4,5,6,7,8]},
-                {<<"reserved1">>, 0},
-                {<<"reserved2">>, 0},
-                {<<"reserved3">>, 0},
-                {<<"reserved4">>, 0},
-                {<<"reserved5">>, 0},
-                {<<"reserved6">>, 0},
-                {<<"reserved7">>, 0},
-                {<<"experience">>, 0}
-            ]),
             [
-                ?_assertEqual({ok, {profile, ExpectedProfile}}, Res)
+                ?_assertMatch({ok, {profile, _}}, Res)
             ]
         end
     }.

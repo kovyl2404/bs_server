@@ -72,6 +72,7 @@ encode_profile_request(RawProfile) ->
     Reserved7 = orddict:fetch(<<"reserved7">>, Profile),
     Score = orddict:fetch(<<"score">>, Profile),
     Achievements = list_to_binary(orddict:fetch(<<"achievements">>, Profile)),
+    Timestamp = orddict:fetch(<<"timestamp">>, Profile),
     <<
         Rank:4/unsigned-big-integer-unit:8,
         Experience:4/unsigned-big-integer-unit:8,
@@ -83,7 +84,8 @@ encode_profile_request(RawProfile) ->
         Reserved6:4/unsigned-big-integer-unit:8,
         Reserved7:4/unsigned-big-integer-unit:8,
         Score:4/unsigned-big-integer-unit:8,
-        Achievements/binary
+        Achievements:8/binary-unit:8,
+        Timestamp:8/unsigned-big-integer-unit:8
     >>.
 
 decode_profile_request(Packet) ->
@@ -98,7 +100,8 @@ decode_profile_request(Packet) ->
             Reserved6:4/unsigned-big-integer-unit:8,
             Reserved7:4/unsigned-big-integer-unit:8,
             Score:4/unsigned-big-integer-unit:8,
-            Achievements:8/binary
+            Achievements:8/binary-unit:8,
+            Timestamp:8/unsigned-big-integer-unit:8
         >> ->
             Profile = [
                 {<<"rank">>, Rank},
@@ -111,7 +114,8 @@ decode_profile_request(Packet) ->
                 {<<"reserved6">>, Reserved6},
                 {<<"reserved7">>, Reserved7},
                 {<<"score">>, Score},
-                {<<"achievements">>, binary_to_list(Achievements)}
+                {<<"achievements">>, binary_to_list(Achievements)},
+                {<<"timestamp">>, Timestamp}
             ],
             {ok, Profile};
         _ ->
@@ -137,14 +141,18 @@ decode_top_request(TopRequest) ->
         _ -> {error, invalid_packet}
     end.
 
-encode_auth_response(true) ->
+encode_auth_response(ok) ->
+    <<0>>;
+encode_auth_response(incorrect_login) ->
     <<1>>;
-encode_auth_response(false) ->
-    <<0>>.
+encode_auth_response(incorrect_password) ->
+    <<2>>.
 
+decode_auth_response(<<2>>) ->
+    {ok, incorrect_password};
 decode_auth_response(<<1>>) ->
-    {ok, true};
+    {ok, incorrect_login};
 decode_auth_response(<<0>>) ->
-    {ok, false};
+    {ok, ok};
 decode_auth_response(_X) ->
     {error, invalid_packet}.

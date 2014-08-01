@@ -83,7 +83,8 @@ register_test_() ->
         {<<"reserved6">>, 6},
         {<<"reserved7">>, 7},
         {<<"score">>, 100},
-        {<<"achievements">>, [1,2,3,4,5,6,7,8]}
+        {<<"achievements">>, [1,2,3,4,5,6,7,8]},
+        {<<"timestamp">>, 12345}
     ],
     fixture(
         fun(_) ->
@@ -128,7 +129,7 @@ register_test_() ->
                 ?_assertEqual({error, timeout}, SessionDown),
                 ?_assertEqual({ok, {register, <<"login">>, <<"password">>}}, RegisterInDatabase),
                 ?_assertEqual({ok, [
-                    {data, <<?REGISTER_TAG, 1>>}, {data, ExpectedProfileFrame}
+                    {data, <<?REGISTER_TAG, 0>>}, {data, ExpectedProfileFrame}
                 ]}, RegisterOkResponse)
             ]
 
@@ -176,7 +177,7 @@ invalid_register_test_() ->
             [
                 ?_assertEqual({error, timeout}, SessionAlive),
                 ?_assertEqual({ok, {register, <<"login">>, <<"password">>}}, RegisterInDatabase),
-                ?_assertEqual({ok, [{data, <<?REGISTER_TAG, 0>>}]}, RegisterOkResponse),
+                ?_assertEqual({ok, [{data, <<?REGISTER_TAG, 1>>}]}, RegisterOkResponse),
                 ?_assertEqual({ok, not_auth}, SessionDown)
             ]
 
@@ -319,7 +320,8 @@ login_test_() ->
         {<<"reserved6">>, 6},
         {<<"reserved7">>, 7},
         {<<"score">>, 100},
-        {<<"achievements">>, [1,2,3,4,5,6,7,8]}
+        {<<"achievements">>, [1,2,3,4,5,6,7,8]},
+        {<<"timestamp">>, 12345}
     ],
     fixture(
         fun(_) ->
@@ -363,7 +365,7 @@ login_test_() ->
                 ?_assertEqual({error, timeout}, SessionDown),
                 ?_assertEqual({ok, {login, <<"login">>, <<"password">>}}, RegisterInDatabase),
                 ?_assertEqual({ok, [
-                    {data, <<?LOGIN_TAG, 1>>}, {data, ExpectedProfileFrame}
+                    {data, <<?LOGIN_TAG, 0>>}, {data, ExpectedProfileFrame}
                 ]}, RegisterOkResponse)
             ]
 
@@ -382,7 +384,8 @@ update_profile_not_auth_test_() ->
         {<<"reserved6">>, 6},
         {<<"reserved7">>, 7},
         {<<"score">>, 100},
-        {<<"achievements">>, [1,2,3,4,5,6,7,8]}
+        {<<"achievements">>, [1,2,3,4,5,6,7,8]},
+        {<<"timestamp">>, 7890}
     ],
     fixture(
         fun(_) ->
@@ -428,7 +431,8 @@ update_profile_test_() ->
         {<<"reserved6">>, 6},
         {<<"reserved7">>, 7},
         {<<"score">>, 100},
-        {<<"achievements">>, [1,2,3,4,5,6,7,8]}
+        {<<"achievements">>, [1,2,3,4,5,6,7,8]},
+        {<<"timestamp">>, 12345}
     ],
     fixture(
         fun(_) ->
@@ -532,7 +536,7 @@ invalid_login_test_() ->
             [
                 ?_assertEqual({error, timeout}, SessionAlive),
                 ?_assertEqual({ok, {login, <<"login">>, <<"password">>}}, RegisterInDatabase),
-                ?_assertEqual({ok, [{data, <<?LOGIN_TAG, 0>>}]}, RegisterOkResponse),
+                ?_assertEqual({ok, [{data, <<?LOGIN_TAG, 1>>}]}, RegisterOkResponse),
                 ?_assertEqual({ok, not_auth}, SessionDown)
             ]
 

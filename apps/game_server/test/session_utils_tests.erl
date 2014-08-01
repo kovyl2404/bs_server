@@ -25,15 +25,19 @@ encode_decode_register_request_test() ->
     ].
 
 encode_decode_register_response_test() ->
-    Packet1 = session_utils:encode_auth_response(true),
-    Packet2 = session_utils:encode_auth_response(false),
+    Packet1 = session_utils:encode_auth_response(ok),
+    Packet2 = session_utils:encode_auth_response(incorrect_login),
+    Packet3 = session_utils:encode_auth_response(incorrect_password),
     Result1 = session_utils:decode_auth_response(iolist_to_binary(Packet1)),
     Result2 = session_utils:decode_auth_response(iolist_to_binary(Packet2)),
+    Result3 = session_utils:decode_auth_response(iolist_to_binary(Packet3)),
     [
         ?_assertEqual(1, iolist_size(Packet1)),
         ?_assertEqual(1, iolist_size(Packet2)),
-        ?_assertEqual({ok, true}, Result1),
-        ?_assertEqual({ok, false}, Result2)
+        ?_assertEqual(1, iolist_size(Packet3)),
+        ?_assertEqual({ok, ok}, Result1),
+        ?_assertEqual({ok, incorrect_login}, Result2),
+        ?_assertEqual({ok, incorrect_password}, Result3)
     ].
 
 encode_decode_profile_test() ->
@@ -48,7 +52,8 @@ encode_decode_profile_test() ->
         {<<"reserved6">>, 6},
         {<<"reserved7">>, 7},
         {<<"score">>, 100},
-        {<<"achievements">>, [1,2,3,4,5,6,7,8]}
+        {<<"achievements">>, [1,2,3,4,5,6,7,8]},
+        {<<"timestamp">>, 12345}
     ],
     Packet = session_utils:encode_profile_request(Profile),
     {ok, DecodedProfile} = session_utils:decode_profile_request(Packet),

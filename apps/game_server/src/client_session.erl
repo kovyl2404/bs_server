@@ -125,7 +125,7 @@ guest(
                     EncodedProfile = session_utils:encode_profile_request(Profile),
                     Transport:send(
                         Socket,[
-                            session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(true)]),
+                            session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(ok)]),
                             session_utils:make_server_frame([?PROFILE_TAG, EncodedProfile])
                         ]
 
@@ -134,10 +134,17 @@ guest(
                     folsom_metrics:notify({?GAME_SERVER_AUTHENTICATED_CONNECTIONS_METRIC, {inc, 1}}),
                     {next_state, idle, State#state{ peer_name = <<"login">>}};
                 {error, not_found} ->
-                    ?ERROR("Client session ~p failed authentication",[self()]),
+                    ?ERROR("Client session ~p failed authentication as ~p (no such login found)",[self(), Login]),
                     Transport:send(
                         Socket,
-                        session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(false)])
+                        session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(incorrect_login)])
+                    ),
+                    {next_state, guest, State};
+                {error, incorrect_password} ->
+                    ?ERROR("Client session ~p failed authentication as ~p (incorrect password)",[self(), Login]),
+                    Transport:send(
+                        Socket,
+                        session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(incorrect_password)])
                     ),
                     {next_state, guest, State}
             end;
@@ -164,7 +171,7 @@ guest(
                     EncodedProfile = session_utils:encode_profile_request(Profile),
                     Transport:send(
                         Socket,[
-                            session_utils:make_server_frame([?REGISTER_TAG, session_utils:encode_auth_response(true)]),
+                            session_utils:make_server_frame([?REGISTER_TAG, session_utils:encode_auth_response(ok)]),
                             session_utils:make_server_frame([?PROFILE_TAG, EncodedProfile])
                         ]
                     ),
@@ -173,7 +180,7 @@ guest(
                     ?DEBUG("Client session ~p failed registration, login exists", [self()]),
                     Transport:send(
                         Socket,
-                        session_utils:make_server_frame([?REGISTER_TAG, session_utils:encode_auth_response(false)])
+                        session_utils:make_server_frame([?REGISTER_TAG, session_utils:encode_auth_response(incorrect_login)])
                     ),
                     {next_state, guest, State}
             end;
