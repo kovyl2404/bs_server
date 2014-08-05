@@ -47,13 +47,13 @@ do_strip_zeros(Rest) ->
 
 encode_auth_request(Login, Password) ->
     [
-        allign_string(Login, 64),
-        allign_string(Password, 64)
+        allign_string(Login, 32),
+        allign_string(Password, 32)
     ].
 
 decode_auth_request(Packet) ->
     case Packet of
-        <<Login:64/binary, Password:64/binary>> ->
+        <<Login:32/binary, Password:32/binary>> ->
             {ok, {strip_trailing_zeros(Login), strip_trailing_zeros(Password)}};
         _ ->
             {error, invalid_packet}
