@@ -132,7 +132,7 @@ guest(
                     ),
                     folsom_metrics:notify({?GAME_SERVER_GUEST_CONNECTIONS_METRIC, {dec, 1}}),
                     folsom_metrics:notify({?GAME_SERVER_AUTHENTICATED_CONNECTIONS_METRIC, {inc, 1}}),
-                    {next_state, idle, State#state{ peer_name = <<"login">>}};
+                    {next_state, idle, State#state{ peer_name = Login }};
                 {error, not_found} ->
                     ?ERROR("Client session ~p failed authentication as ~p (no such login found)",[self(), Login]),
                     Transport:send(
