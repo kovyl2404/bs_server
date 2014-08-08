@@ -205,6 +205,29 @@ guest(
     ),
     {noreply, State};
 
+guest(
+    {data, <<?SERVER_STATUS_TAG, StatusRequest/binary>>},
+    #state{
+        transport = Transport,
+        socket = Socket
+    } = State
+) ->
+    {ok, ClientVsn} = session_utils:decode_server_status_request(StatusRequest),
+
+    {ClientConnections, GamesRunning, GamesWaiting} = session_utils:get_basic_metrics(),
+    VersionSupported = game_server:is_supported_vsn(ClientVsn),
+    Response =
+        session_utils:encode_server_status_response(
+            VersionSupported, ClientConnections, GamesRunning, GamesWaiting
+        ),
+    Transport:send(Socket, session_utils:make_server_frame([?SERVER_STATUS_TAG, Response])),
+    case VersionSupported of
+        true ->
+            {next_state, guest, State};
+        false ->
+            {stop, invalid_vsn, State}
+    end;
+
 guest(_, State) ->
     {stop, not_auth, State}.
 
@@ -270,9 +293,33 @@ idle(
         Socket,
         session_utils:make_server_frame([?TOP_TAG, session_utils:encode_top_response(Top)])
     ),
-    {noreply, State};
+    {next_state, idle, State};
 
-idle( _, State ) ->
+idle(
+    {data, <<?SERVER_STATUS_TAG, StatusRequest/binary>>},
+    #state{
+        transport = Transport,
+        socket = Socket
+    } = State
+) ->
+    {ok, ClientVsn} = session_utils:decode_server_status_request(StatusRequest),
+
+    {ClientConnections, GamesRunning, GamesWaiting} = session_utils:get_basic_metrics(),
+    VersionSupported = game_server:is_supported_vsn(ClientVsn),
+    Response =
+        session_utils:encode_server_status_response(
+            VersionSupported, ClientConnections, GamesRunning, GamesWaiting
+        ),
+    Transport:send(Socket, session_utils:make_server_frame([?SERVER_STATUS_TAG, Response])),
+    case VersionSupported of
+        true ->
+            {next_state, idle, State};
+        false ->
+            {stop, invalid_vsn, State}
+    end;
+
+
+idle( _Msg, State ) ->
     {stop, protocol_violation, State}.
 
 

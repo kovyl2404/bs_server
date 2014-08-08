@@ -11,6 +11,9 @@
   ]},
   {mod, { game_server, []}},
   {env, [
+      {server_status_options, [
+          {supported_vsn, 1}
+      ]},
       {profile, undefined},
       {max_pings_allowed, 5},
       {ping_interval_sec, 1},

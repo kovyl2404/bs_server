@@ -73,6 +73,7 @@ stop() ->
 
 init_metrics() ->
     ok = folsom_metrics:new_counter(?RUNNING_GAMES_METRIC),
+    ok = folsom_metrics:new_counter(?WAITING_GAMES_METRIC),
     ok = folsom_metrics:new_meter(?START_GAME_REQUESTS_METRIC),
     ok = folsom_metrics:new_meter(?CANCELLED_GAMES_METRIC),
     ok = folsom_metrics:new_meter(?CANCELLED_WAITING_GAMES_METRIC),
@@ -81,6 +82,7 @@ init_metrics() ->
     ok = folsom_metrics:new_meter(?TIMEDOUT_GAMES_METRIC),
 
     ok = folsom_metrics:tag_metric(?RUNNING_GAMES_METRIC, ?GAME_LOBBY_METRICS),
+    ok = folsom_metrics:tag_metric(?WAITING_GAMES_METRIC, ?GAME_LOBBY_METRICS),
     ok = folsom_metrics:tag_metric(?START_GAME_REQUESTS_METRIC, ?GAME_LOBBY_METRICS),
     ok = folsom_metrics:tag_metric(?CANCELLED_GAMES_METRIC, ?GAME_LOBBY_METRICS),
     ok = folsom_metrics:tag_metric(?CANCELLED_WAITING_GAMES_METRIC, ?GAME_LOBBY_METRICS),

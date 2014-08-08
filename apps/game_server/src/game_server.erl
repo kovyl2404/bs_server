@@ -23,7 +23,11 @@
 
 %% Helpers
 -export([
-   start/0, stop/0
+    init_server_status/1,
+    cleanup_server_status/0,
+    init_metrics/0,
+    is_supported_vsn/1,
+    start/0, stop/0
 ]).
 
 
@@ -39,8 +43,27 @@ stop() ->
     ok = application:stop(game_server),
     ok = stop_deps().
 
+init_server_status(Options) ->
+    ets:new(game_server_status, [bag, protected, named_table]),
+    [ ets:insert(game_server_status, Opt)
+        || Opt <- Options
+    ],
+    ok.
+
+cleanup_server_status() ->
+    ets:delete(game_server_status),
+    ok.
+
+is_supported_vsn(ClientVsn) ->
+    case ets:match(game_server_status, {supported_vsn, ClientVsn}) of
+        [_] -> true;
+        _ -> false
+    end.
+
+
 start(_StartType, _StartArgs) ->
     ok = init_metrics(),
+    ok = init_server_status(server_status_options()),
     TransportOptions = transport_options(),
     StartResult =
         ranch:start_listener(
@@ -90,6 +113,12 @@ connection_options() ->
         {ping_interval_sec, PingIntervalSec},
         {max_pings_allowed, MaxPingsAllowed}
     ].
+
+server_status_options() ->
+    case application:get_env(game_server, server_status) of
+        {ok, Options} -> Options;
+        _ -> []
+    end.
 
 
 init_metrics() ->

@@ -84,6 +84,7 @@
 -define( REGISTER_TAG, 1 ).
 -define( PROFILE_TAG, 2 ).
 -define( TOP_TAG, 3 ).
+-define( SERVER_STATUS_TAG, 4).
 
 
 

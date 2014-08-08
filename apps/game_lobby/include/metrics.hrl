@@ -5,6 +5,7 @@
 -define(GAME_LOBBY_METRICS, game_lobby).
 
 -define(RUNNING_GAMES_METRIC, "game_lobby.running_games").
+-define(WAITING_GAMES_METRIC, "game_lobby.waiting_games").
 -define(START_GAME_REQUESTS_METRIC, "game_lobby.start_game_requests").
 -define(CANCELLED_GAMES_METRIC, "game_lobby.cancelled_games.running").
 -define(CANCELLED_WAITING_GAMES_METRIC, "game_lobby.cancelled_games.waiting").

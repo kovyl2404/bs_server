@@ -4,6 +4,9 @@
 -include_lib("game_server/include/client_protocol.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-include_lib("game_server/include/metrics.hrl").
+-include_lib("game_lobby/include/metrics.hrl").
+
 %% API
 -export([
     make_server_frame/1,
@@ -16,7 +19,11 @@
     encode_profile_request/1,
     decode_profile_request/1,
     encode_top_response/1,
-    decode_top_request/1
+    decode_top_request/1,
+    decode_server_status_request/1,
+    encode_server_status_request/1,
+    encode_server_status_response/4,
+    get_basic_metrics/0
 ]).
 
 make_server_frame(Iolist) ->
@@ -156,3 +163,25 @@ decode_auth_response(<<0>>) ->
     {ok, ok};
 decode_auth_response(_X) ->
     {error, invalid_packet}.
+
+decode_server_status_request(<<ClientVersion:2/big-unsigned-integer-unit:8>>) ->
+    {ok, ClientVersion};
+decode_server_status_request(_) ->
+    {error, invalid_packet}.
+
+encode_server_status_request(ClientVersion) ->
+    <<ClientVersion:2/big-unsigned-integer-unit:8>>.
+
+encode_server_status_response(IsVersionSupported, TotalConnections, RunningGames, WaitingGames) ->
+    SupportedFlag = case IsVersionSupported of true -> 1; false -> 0 end,
+    <<SupportedFlag,
+        TotalConnections:4/big-unsigned-integer-unit:8,
+        RunningGames:4/big-unsigned-integer-unit:8,
+        WaitingGames:4/big-unsigned-integer-unit:8
+    >>.
+
+get_basic_metrics() ->
+    ClientConnections = folsom_metrics:get_metric_value(?GAME_SERVER_CONNECTIONS_METRIC),
+    GamesWaiting = folsom_metrics:get_metric_value(?WAITING_GAMES_METRIC),
+    GamesRunning = folsom_metrics:get_metric_value(?RUNNING_GAMES_METRIC),
+    {ClientConnections, GamesRunning, GamesWaiting}.
