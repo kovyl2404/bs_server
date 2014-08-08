@@ -118,6 +118,7 @@ guest(
     ?DEBUG("Client session ~p (guest) received auth request ~p",[self(), AuthRequest]),
     case session_utils:decode_auth_request(AuthRequest) of
         {ok, {Login, Password}} ->
+            true = gproc:reg({n, l, Login}),
             ?DEBUG("Client session ~p trying to authenticate with login ~p and password ~p",[self(), Login, Password]),
             case ProfileBackend:login(Login, Password) of
                 {ok, Profile} ->

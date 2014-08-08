@@ -15,6 +15,7 @@ fixture(Inst) ->
 
 setup() ->
     ok = application:start(ranch),
+    ok = application:start(gproc),
     ok = application:load(game_server),
     ok = application:set_env(game_server, port, 7891),
     ok = application:set_env(game_server, max_pings_allowed, 5),
@@ -26,6 +27,7 @@ cleanup(_) ->
     ok = application:stop(game_server),
     ok = application:stop(folsom),
     ok = application:unload(game_server),
+    ok = application:stop(gproc),
     ok = application:stop(ranch).
 
 before_test() ->

@@ -11,6 +11,7 @@ fixture(Inst) ->
         fun() ->
             ok = application:start(folsom),
             ok = game_lobby:start(),
+            ok = application:start(gproc),
             ok = meck:new(mock_session_writer, [passthrough]),
             ok = application:load(game_server),
             flush_messages()
@@ -19,6 +20,7 @@ fixture(Inst) ->
             ok = application:unload(game_server),
             ok = meck:unload(mock_session_writer),
             ok = game_lobby:stop(),
+            ok = application:stop(gproc),
             ok = application:stop(folsom)
         end,
         Inst
