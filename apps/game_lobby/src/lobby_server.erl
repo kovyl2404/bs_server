@@ -81,7 +81,7 @@ handle_call(
     folsom_metrics:notify({?WAITING_GAMES_METRIC, {inc, 1}}),
     WaitingMonitor = monitor(process, ClientPid),
     Token = lobby_utils:random_token(),
-    ?NOTICE("User ~p waiting for game ~p",[ClientLabel, Token]),
+    ?NOTICE("User ~s waiting for game ~p",[ClientLabel, Token]),
     {reply, {ok, Token}, State#state{
         waiting_client = {ClientPid, Token, WaitingMonitor, ClientLabel}
     }};
@@ -95,7 +95,7 @@ handle_call(
         monitors_table = MonitorsTable
     } = State
 ) ->
-    ?NOTICE("User ~p will play with ~p in game ~p",[ClientLabel, WaitingClientLabel, WaitingToken]),
+    ?NOTICE("User ~s will play with ~p in game ~p",[ClientLabel, WaitingClientLabel, WaitingToken]),
     FirstTag = lobby_utils:random_token(),
     SecondTag = lobby_utils:random_token(),
     demonitor(WaitingMonitor, [flush]),
@@ -124,7 +124,7 @@ handle_call(
 
     } = State
 ) ->
-    ?DEBUG("Client session ~p (~p) asked to reconnect game ~p",[ClientPid, ClientLabel, GameToken]),
+    ?DEBUG("Client session ~p (~s) asked to reconnect game ~p",[ClientPid, ClientLabel, GameToken]),
     case ets:lookup(?SERVER, GameToken) of
         [{_, SessionPid}] ->
             ?DEBUG("Game ~p still exists in game session ~p",[GameToken, SessionPid]),
@@ -151,7 +151,7 @@ handle_call(
 ) when Token =:= WaitingClientToken ->
     folsom_metrics:notify({?CANCELLED_WAITING_GAMES_METRIC, 1}),
     folsom_metrics:notify({?WAITING_GAMES_METRIC, {dec, 1}}),
-    ?DEBUG("Waiting client ~p (~p) asked to cancel game ~p",[WaitingClientPid, _ClientLabel, WaitingClientToken]),
+    ?DEBUG("Waiting client ~p (~s) asked to cancel game ~p",[WaitingClientPid, _ClientLabel, WaitingClientToken]),
     demonitor(WaitingMonitor, [flush]),
     WaitingClientPid ! #game_stop{ token = Token },
     {reply, {ok, Token}, State#state{waiting_client = undefined }};

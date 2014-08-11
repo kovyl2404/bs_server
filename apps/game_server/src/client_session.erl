@@ -120,7 +120,7 @@ guest(
         {ok, {Login, Password}} ->
             LoginString = unicode:characters_to_list(Login, utf8),
             true = gproc:reg({n, l, Login}),
-            ?DEBUG("Client session ~p trying to authenticate with login ~p and password ~p",[self(), LoginString, Password]),
+            ?DEBUG("Client session ~p trying to authenticate with login ~s and password ~p",[self(), LoginString, Password]),
             case ProfileBackend:login(Login, Password) of
                 {ok, Profile} ->
                     ?DEBUG("Client session ~p successfully authenticated",[self()]),
@@ -136,14 +136,14 @@ guest(
                     folsom_metrics:notify({?GAME_SERVER_AUTHENTICATED_CONNECTIONS_METRIC, {inc, 1}}),
                     {next_state, idle, State#state{ peer_name = LoginString }};
                 {error, not_found} ->
-                    ?ERROR("Client session ~p failed authentication as ~p (no such login found)",[self(), LoginString]),
+                    ?ERROR("Client session ~p failed authentication as ~s (no such login found)",[self(), LoginString]),
                     Transport:send(
                         Socket,
                         session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(incorrect_login)])
                     ),
                     {next_state, guest, State};
                 {error, incorrect_password} ->
-                    ?ERROR("Client session ~p failed authentication as ~p (incorrect password)",[self(), LoginString]),
+                    ?ERROR("Client session ~p failed authentication as ~s (incorrect password)",[self(), LoginString]),
                     Transport:send(
                         Socket,
                         session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(incorrect_password)])
@@ -167,7 +167,7 @@ guest(
     case session_utils:decode_auth_request(RegisterRequest) of
         {ok, {Login, Password}} ->
             LoginString = unicode:characters_to_list(Login, utf8),
-            ?DEBUG("Client session ~p trying to register with login ~p and password ~p",[self(), LoginString, Password]),
+            ?DEBUG("Client session ~p trying to register with login ~s and password ~p",[self(), LoginString, Password]),
             case ProfileBackend:register(Login, Password) of
                 {ok, Profile} ->
                     ?DEBUG("Client session ~p successfully registered", [self()]),
@@ -180,7 +180,7 @@ guest(
                     ),
                     {next_state, idle, State#state{ peer_name = LoginString}};
                 {error, already_registered} ->
-                    ?DEBUG("Client session ~p failed registration, login ~p exists", [self(), LoginString]),
+                    ?DEBUG("Client session ~p failed registration, login ~s exists", [self(), LoginString]),
                     Transport:send(
                         Socket,
                         session_utils:make_server_frame([?REGISTER_TAG, session_utils:encode_auth_response(incorrect_login)])
@@ -241,14 +241,14 @@ idle(
     } = State
 ) ->
     {ok, GameToken} = game_lobby:checkin(self(), PeerName),
-    ?DEBUG("Client session ~p (~p) received request to start new game ~p", [self(), PeerName, GameToken]),
+    ?DEBUG("Client session ~p (~s) received request to start new game ~p", [self(), PeerName, GameToken]),
     {next_state, waiting_for_game, State#state{ game_token = GameToken }};
 
 idle(
     {command, ?START_GAME_PACKET(?RECONNECT_GAME_FLAG)},
     #state{peer_name = _PeerName} = State
 ) ->
-    ?DEBUG("Client session ~p (~p) received request to reconnect existed game", [self(), _PeerName]),
+    ?DEBUG("Client session ~p (~s) received request to reconnect existed game", [self(), _PeerName]),
     {next_state, waiting_for_game, State#state{ game_token = reconnecting }};
 
 idle( {command, _Command}, #state{peer_name = _PeerName} = State ) ->
@@ -263,10 +263,10 @@ idle(
         peer_name = PeerName
     } = State
 ) when ProfileBackend =/= undefined  ->
-    ?DEBUG("Client session ~p (~p) received request to update profile", [self(), PeerName]),
+    ?DEBUG("Client session ~p (~s) received request to update profile", [self(), PeerName]),
     case session_utils:decode_profile_request(ProfileRequest) of
         {ok, Profile} ->
-            ?DEBUG("Client session ~p (~p) successfully decoded profile ~p", [self(), PeerName, Profile]),
+            ?DEBUG("Client session ~p (~s) successfully decoded profile ~p", [self(), PeerName, Profile]),
             {ok, UpdatedProfile} = ProfileBackend:update_profile(Profile, unicode:characters_to_binary(PeerName, utf8)),
             EncodedProfile = session_utils:encode_profile_request(UpdatedProfile),
             Transport:send(
@@ -276,7 +276,7 @@ idle(
             ),
             {next_state, idle, State};
         {error, _Reason} ->
-            ?DEBUG("Client session ~p (~p) failed to decoded profile with reason ~p", [self(), PeerName, _Reason]),
+            ?DEBUG("Client session ~p (~s) failed to decoded profile with reason ~p", [self(), PeerName, _Reason]),
             {stop, protocol_violation, State}
     end;
 
@@ -290,7 +290,7 @@ idle(
         peer_name = _PeerName
     } = State
 ) when ProfileBackend =/= undefined ->
-    ?DEBUG("Client session ~p (~p) received top request (~p items)", [self(), _PeerName, TopRequest]),
+    ?DEBUG("Client session ~p (~s) received top request (~p items)", [self(), _PeerName, TopRequest]),
     {ok, Top} = ProfileBackend:get_top(TopRequest),
     Transport:send(
         Socket,
@@ -333,7 +333,7 @@ waiting_for_game(
         peer_name = _PeerName
     } = State
 ) when Token =/= reconnecting ->
-    ?DEBUG("Client session ~p (~p) received request to cancel game ~p", [self(), _PeerName, Token]),
+    ?DEBUG("Client session ~p (~s) received request to cancel game ~p", [self(), _PeerName, Token]),
     {ok, _} = game_lobby:cancel(Token),
     {next_state, waiting_for_game, State};
 
@@ -346,15 +346,15 @@ waiting_for_game(
         peer_name = PeerName
     } = State
 ) ->
-    ?DEBUG("Client session ~p (~p) received reconnection token ~p", [self(), PeerName, ReconnectionData]),
+    ?DEBUG("Client session ~p (~s) received reconnection token ~p", [self(), PeerName, ReconnectionData]),
     case (catch binary_to_term(ReconnectionData)) of
         {ClientToken, ClientTag} ->
             case game_lobby:checkin(self(), PeerName, ClientToken, ClientTag) of
                 {ok, ClientToken} ->
-                    ?DEBUG("Client session ~p (~p) reconnected to game ~p", [self(), PeerName, ClientToken]),
+                    ?DEBUG("Client session ~p (~s) reconnected to game ~p", [self(), PeerName, ClientToken]),
                     {next_state, waiting_for_game, State#state{ game_token = ClientToken}};
                 {error, session_expired} ->
-                    ?DEBUG("Client session ~p (~p) failed to reconnect to game ~p, because of session expired", [self(), PeerName, ClientToken]),
+                    ?DEBUG("Client session ~p (~s) failed to reconnect to game ~p, because of session expired", [self(), PeerName, ClientToken]),
                     SendFrame = [
                         ?START_GAME_PACKET(0),
                         session_utils:make_server_frame(ReconnectionData),
@@ -363,11 +363,11 @@ waiting_for_game(
                     Transport:send(Socket, SendFrame),
                     {next_state, idle, #state{socket = Socket, transport = Transport, peer_name = PeerName}};
                 {error, _Reason} ->
-                    ?DEBUG("Client session ~p (~p) failed to reconnect to game ~p, because of ~p", [self(), PeerName, ClientToken, _Reason]),
+                    ?DEBUG("Client session ~p (~s) failed to reconnect to game ~p, because of ~p", [self(), PeerName, ClientToken, _Reason]),
                     {stop, reconnection_token_corrupted, State}
             end;
         _ ->
-            ?DEBUG("Client session ~p (~p) failed to decode reconnection token ~p", [self(), PeerName, ReconnectionData]),
+            ?DEBUG("Client session ~p (~s) failed to decode reconnection token ~p", [self(), PeerName, ReconnectionData]),
             {stop, reconnection_token_corrupted, State}
     end;
 
@@ -385,7 +385,7 @@ running_game(
         peer_name = _PeerName
     } = State
 ) ->
-    ?DEBUG("Client session ~p (~p) received request to cancel game ~p", [self(), _PeerName, Token]),
+    ?DEBUG("Client session ~p (~s) received request to cancel game ~p", [self(), _PeerName, Token]),
     {ok, _} = game_lobby:cancel(Token),
     {next_state, stopping_game, State};
 
@@ -404,9 +404,9 @@ running_game(
     ok = game_session:surrender(GameSession, ClientTag, Surrender),
     case IsSurrenderClaimed of
         true ->
-            ?DEBUG("Client session ~p (~p) acknowledged that remote peer surrendered in game ~p", [self(), PeerName, _Token]);
+            ?DEBUG("Client session ~p (~s) acknowledged that remote peer surrendered in game ~p", [self(), PeerName, _Token]);
         false ->
-            ?DEBUG("Client session ~p (~p) decided to surrendered in game ~p", [self(), PeerName, _Token])
+            ?DEBUG("Client session ~p (~s) decided to surrendered in game ~p", [self(), PeerName, _Token])
     end,
     {next_state, stopping_game, State};
 
@@ -421,7 +421,7 @@ running_game(
         peer_name = _PeerName
     } = State
 ) ->
-    ?DEBUG("Client session ~p (~p) makes turn ~p instead of surrendered acknowledge in game ~p", [self(), _PeerName, _TurnData, _Token]),
+    ?DEBUG("Client session ~p (~s) makes turn ~p instead of surrendered acknowledge in game ~p", [self(), _PeerName, _TurnData, _Token]),
     ok = game_session:surrender(GameSession, ClientTag, ?SURRENDER_PACKET_NIL()),
     {stop, protocol_violation, State};
 
@@ -436,7 +436,7 @@ running_game(
         game_token = _Token
     } = State
 ) ->
-    ?DEBUG("Client session ~p (~p) makes turn ~p in game ~p", [self(), _PeerName, TurnData, _Token]),
+    ?DEBUG("Client session ~p (~s) makes turn ~p in game ~p", [self(), _PeerName, TurnData, _Token]),
     ok = game_session:make_turn(GameSession, ClientTag, TurnData),
     {next_state, running_game, State#state{ is_ours_turn = false }};
 
@@ -450,7 +450,7 @@ running_game(
         game_token = _Token
     } = State
 ) ->
-    ?DEBUG("Client session ~p (~p) makes UNEXPECTED turn ~in game ~p", [self(), _PeerName, _Turn, _Token]),
+    ?DEBUG("Client session ~p (~s) makes UNEXPECTED turn ~in game ~p", [self(), _PeerName, _Turn, _Token]),
     {stop, protocol_violation, State};
 
 running_game(
@@ -489,14 +489,14 @@ handle_info(
     ],
     case Transport:send(Socket, SendFrame) of
         ok ->
-            ?DEBUG("Client session ~p (~p) successfully started game ~p", [self(), _PeerName, Token]),
+            ?DEBUG("Client session ~p (~s) successfully started game ~p", [self(), _PeerName, Token]),
             {next_state, running_game, State#state{
                 game_session = GameSession,
                 client_tag = ClientTag,
                 is_ours_turn = Turn
             }};
         _Error ->
-            ?DEBUG("Client session ~p (~p) failed to start game, because of socket error ~p", [self(), _PeerName, Token, _Error]),
+            ?DEBUG("Client session ~p (~s) failed to start game, because of socket error ~p", [self(), _PeerName, Token, _Error]),
             {ok, _} = game_lobby:cancel(Token),
             {stop, normal, State}
     end;
@@ -514,7 +514,7 @@ handle_info(
         profile_backend = ProfileBackend
     }
 ) when StateName =:= waiting_for_game; StateName =:= stopping_game; StateName =:= running_game ->
-    ?DEBUG("Client session ~p (~p) finished game ~p in state ~p", [self(), PeerName, _Token, StateName]),
+    ?DEBUG("Client session ~p (~s) finished game ~p in state ~p", [self(), PeerName, _Token, StateName]),
     Transport:send(Socket, ?CANCEL_GAME_PACKET),
     {next_state, idle, #state{
         socket = Socket, transport = Transport, peer_name = PeerName,
@@ -535,7 +535,7 @@ handle_info(
         game_token = _Token
     } = State
 ) ->
-    ?DEBUG("Client session ~p (~p) received peer turn ~p in game ~p", [self(), _PeerName, TurnData, _Token]),
+    ?DEBUG("Client session ~p (~s) received peer turn ~p in game ~p", [self(), _PeerName, TurnData, _Token]),
     Transport:send(Socket, TurnData),
     {next_state, running_game, State#state{is_ours_turn = true}};
 
@@ -553,7 +553,7 @@ handle_info(
         game_token = _Token
     } = State
 ) ->
-    ?DEBUG("Client session ~p (~p) received peer surrender ~p in game ~p", [self(), _PeerName, SurrenderData, _Token]),
+    ?DEBUG("Client session ~p (~s) received peer surrender ~p in game ~p", [self(), _PeerName, SurrenderData, _Token]),
     Transport:send(Socket, SurrenderData),
     {next_state, running_game, State#state{is_surrender_claimed = true, is_ours_turn = true}};
 
