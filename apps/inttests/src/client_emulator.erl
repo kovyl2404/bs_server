@@ -181,7 +181,7 @@ handle_cast(
         socket = Socket
     } = State
 ) ->
-    ok = gen_tcp:send(Socket, [?SURRENDER_PACKET(0,0,0)]),
+    ok = gen_tcp:send(Socket, [?SURRENDER_PACKET_NIL()]),
     {noreply, State};
 
 handle_cast(

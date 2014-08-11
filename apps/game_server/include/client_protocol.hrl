@@ -35,13 +35,11 @@
     SURRENDER_PACKET,
     <<
         ?SURRENDER_TAG,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        _:31/binary-unit:8
     >>
 ).
 -define(
-    SURRENDER_PACKET(A, B, C),
+    SURRENDER_PACKET_NIL(),
     <<?SURRENDER_TAG,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

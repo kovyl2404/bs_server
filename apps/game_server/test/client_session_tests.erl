@@ -1088,7 +1088,7 @@ peer_surrender_test_() ->
                 fun() ->
                     {ok, _} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{turn = true, session_pid = SessionPid, tag = Tag}} = lobby_utils:wait_game_start(),
-                    ok = game_session:surrender(SessionPid, Tag, ?SURRENDER_PACKET(0, 0, 0)),
+                    ok = game_session:surrender(SessionPid, Tag, ?SURRENDER_PACKET_NIL()),
                     GameStopResult = lobby_utils:wait_game_stop(),
                     TestHost ! {self(), GameStopResult}
                 end,
@@ -1132,7 +1132,7 @@ turn_instead_of_surrender_ack_test_() ->
                 fun() ->
                     {ok, _} = game_lobby:checkin(self(), "red"),
                     {ok, #game_start{turn = true, session_pid = SessionPid, tag = Tag}} = lobby_utils:wait_game_start(),
-                    ok = game_session:surrender(SessionPid, Tag, ?SURRENDER_PACKET(0, 0, 0)),
+                    ok = game_session:surrender(SessionPid, Tag, ?SURRENDER_PACKET_NIL()),
                     GameStopResult = lobby_utils:wait_game_stop(),
                     TestHost ! {self(), GameStopResult}
                 end,
@@ -1149,7 +1149,7 @@ turn_instead_of_surrender_ack_test_() ->
             RemoteClientRef = monitor(process, RemoteClientPid),
             ok = client_session:send_command(RemoteClientPid, {command, ?START_GAME_PACKET(0)}),
             {ok, [{command, _}, {data, _}]} = lobby_utils:wait_from_pid(RemoteClientPid, 100),
-            {ok, [{command, ?SURRENDER_PACKET(0,0,0)}]} = lobby_utils:wait_from_pid(RemoteClientPid, 100),
+            {ok, [{command, ?SURRENDER_PACKET_NIL()}]} = lobby_utils:wait_from_pid(RemoteClientPid, 100),
             ok = client_session:send_command(RemoteClientPid, {command, TurnData}),
             LocalPeerGameStopResult = lobby_utils:wait_from_pid(LocalClientPid, 100),
             RemotePeerDownResult = lobby_utils:wait_process_down_reason(RemoteClientRef, 100),
