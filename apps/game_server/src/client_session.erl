@@ -510,12 +510,16 @@ handle_info(
         socket = Socket,
         transport = Transport,
         peer_name = PeerName,
-        game_token = _Token
+        game_token = _Token,
+        profile_backend = ProfileBackend
     }
 ) when StateName =:= waiting_for_game; StateName =:= stopping_game; StateName =:= running_game ->
     ?DEBUG("Client session ~p (~p) finished game ~p in state ~p", [self(), PeerName, _Token, StateName]),
     Transport:send(Socket, ?CANCEL_GAME_PACKET),
-    {next_state, idle, #state{socket = Socket, transport = Transport, peer_name = PeerName}};
+    {next_state, idle, #state{
+        socket = Socket, transport = Transport, peer_name = PeerName,
+        profile_backend = ProfileBackend
+    }};
 
 
 handle_info(
