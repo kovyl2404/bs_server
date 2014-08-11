@@ -92,7 +92,7 @@ init({
         ]),
         peer_queue = [ FirstTag, SecondTag ],
         peer_labels = orddict:from_list([
-            {FirstTag, FirstLabel}, {SecondTag, FirstLabel}
+            {FirstTag, FirstLabel}, {SecondTag, SecondLabel}
         ]),
         last_turn = undefined
     }}.
