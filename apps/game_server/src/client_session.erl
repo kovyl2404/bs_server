@@ -118,8 +118,9 @@ guest(
     ?DEBUG("Client session ~p (guest) received auth request ~p",[self(), AuthRequest]),
     case session_utils:decode_auth_request(AuthRequest) of
         {ok, {Login, Password}} ->
+            LoginString = unicode:characters_to_list(Login, utf8),
             true = gproc:reg({n, l, Login}),
-            ?DEBUG("Client session ~p trying to authenticate with login ~p and password ~p",[self(), Login, Password]),
+            ?DEBUG("Client session ~p trying to authenticate with login ~p and password ~p",[self(), LoginString, Password]),
             case ProfileBackend:login(Login, Password) of
                 {ok, Profile} ->
                     ?DEBUG("Client session ~p successfully authenticated",[self()]),
@@ -133,16 +134,16 @@ guest(
                     ),
                     folsom_metrics:notify({?GAME_SERVER_GUEST_CONNECTIONS_METRIC, {dec, 1}}),
                     folsom_metrics:notify({?GAME_SERVER_AUTHENTICATED_CONNECTIONS_METRIC, {inc, 1}}),
-                    {next_state, idle, State#state{ peer_name = Login }};
+                    {next_state, idle, State#state{ peer_name = LoginString }};
                 {error, not_found} ->
-                    ?ERROR("Client session ~p failed authentication as ~p (no such login found)",[self(), Login]),
+                    ?ERROR("Client session ~p failed authentication as ~p (no such login found)",[self(), LoginString]),
                     Transport:send(
                         Socket,
                         session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(incorrect_login)])
                     ),
                     {next_state, guest, State};
                 {error, incorrect_password} ->
-                    ?ERROR("Client session ~p failed authentication as ~p (incorrect password)",[self(), Login]),
+                    ?ERROR("Client session ~p failed authentication as ~p (incorrect password)",[self(), LoginString]),
                     Transport:send(
                         Socket,
                         session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(incorrect_password)])
@@ -165,7 +166,8 @@ guest(
     ?DEBUG("Client session ~p (guest) received register request ~p",[self(), RegisterRequest]),
     case session_utils:decode_auth_request(RegisterRequest) of
         {ok, {Login, Password}} ->
-            ?DEBUG("Client session ~p trying to register with login ~p and password ~p",[self(), Login, Password]),
+            LoginString = unicode:characters_to_list(Login, utf8),
+            ?DEBUG("Client session ~p trying to register with login ~p and password ~p",[self(), LoginString, Password]),
             case ProfileBackend:register(Login, Password) of
                 {ok, Profile} ->
                     ?DEBUG("Client session ~p successfully registered", [self()]),
@@ -176,9 +178,9 @@ guest(
                             session_utils:make_server_frame([?PROFILE_TAG, EncodedProfile])
                         ]
                     ),
-                    {next_state, idle, State#state{ peer_name = Login}};
+                    {next_state, idle, State#state{ peer_name = LoginString}};
                 {error, already_registered} ->
-                    ?DEBUG("Client session ~p failed registration, login exists", [self()]),
+                    ?DEBUG("Client session ~p failed registration, login ~p exists", [self(), LoginString]),
                     Transport:send(
                         Socket,
                         session_utils:make_server_frame([?REGISTER_TAG, session_utils:encode_auth_response(incorrect_login)])
@@ -204,7 +206,7 @@ guest(
         Socket,
         session_utils:make_server_frame([?TOP_TAG, session_utils:encode_top_response(Top)])
     ),
-    {noreply, State};
+    {next_state, guest, State};
 
 guest(
     {data, <<?SERVER_STATUS_TAG, StatusRequest/binary>>},
@@ -265,7 +267,7 @@ idle(
     case session_utils:decode_profile_request(ProfileRequest) of
         {ok, Profile} ->
             ?DEBUG("Client session ~p (~p) successfully decoded profile ~p", [self(), PeerName, Profile]),
-            {ok, UpdatedProfile} = ProfileBackend:update_profile(Profile, PeerName),
+            {ok, UpdatedProfile} = ProfileBackend:update_profile(Profile, unicode:characters_to_binary(PeerName, utf8)),
             EncodedProfile = session_utils:encode_profile_request(UpdatedProfile),
             Transport:send(
                 Socket,[
@@ -420,7 +422,7 @@ running_game(
     } = State
 ) ->
     ?DEBUG("Client session ~p (~p) makes turn ~p instead of surrendered acknowledge in game ~p", [self(), _PeerName, _TurnData, _Token]),
-    ok = game_session:surrender(GameSession, ClientTag, ?SURRENDER_PACKET(0,0,0)),
+    ok = game_session:surrender(GameSession, ClientTag, ?SURRENDER_PACKET_NIL()),
     {stop, protocol_violation, State};
 
 running_game(
