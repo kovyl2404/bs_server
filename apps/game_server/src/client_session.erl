@@ -141,7 +141,7 @@ guest(
                                 ?LOGIN_TAG,
                                 session_utils:encode_auth_response(already_authenticated)
                             ])),
-                            {stop, already_auth, State}
+                            {next_state, guest, State}
                     end;
                 {error, not_found} ->
                     ?ERROR("Client session ~p failed authentication as ~s (no such login found)",[self(), LoginString]),
