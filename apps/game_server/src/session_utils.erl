@@ -153,7 +153,9 @@ encode_auth_response(ok) ->
 encode_auth_response(incorrect_login) ->
     <<1>>;
 encode_auth_response(incorrect_password) ->
-    <<2>>.
+    <<2>>;
+encode_auth_response(already_authenticated) ->
+    <<3>>.
 
 decode_auth_response(<<2>>) ->
     {ok, incorrect_password};

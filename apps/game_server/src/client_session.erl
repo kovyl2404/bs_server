@@ -119,22 +119,30 @@ guest(
     case session_utils:decode_auth_request(AuthRequest) of
         {ok, {Login, Password}} ->
             LoginString = unicode:characters_to_list(Login, utf8),
-            true = gproc:reg({n, l, Login}),
+                            
             ?DEBUG("Client session ~p trying to authenticate with login ~s and password ~p",[self(), LoginString, Password]),
             case ProfileBackend:login(Login, Password) of
                 {ok, Profile} ->
-                    ?DEBUG("Client session ~p successfully authenticated",[self()]),
-                    EncodedProfile = session_utils:encode_profile_request(Profile),
-                    Transport:send(
-                        Socket,[
-                            session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(ok)]),
-                            session_utils:make_server_frame([?PROFILE_TAG, EncodedProfile])
-                        ]
-
-                    ),
-                    folsom_metrics:notify({?GAME_SERVER_GUEST_CONNECTIONS_METRIC, {dec, 1}}),
-                    folsom_metrics:notify({?GAME_SERVER_AUTHENTICATED_CONNECTIONS_METRIC, {inc, 1}}),
-                    {next_state, idle, State#state{ peer_name = LoginString }};
+                    case (catch gproc:reg({n, l, Login})) of
+                        true -> 
+                            ?DEBUG("Client session ~p successfully authenticated",[self()]),
+                            EncodedProfile = session_utils:encode_profile_request(Profile),
+                            Transport:send(
+                                Socket,[
+                                    session_utils:make_server_frame([?LOGIN_TAG, session_utils:encode_auth_response(ok)]),
+                                    session_utils:make_server_frame([?PROFILE_TAG, EncodedProfile])
+                                ]
+                            ),
+                            folsom_metrics:notify({?GAME_SERVER_GUEST_CONNECTIONS_METRIC, {dec, 1}}),
+                            folsom_metrics:notify({?GAME_SERVER_AUTHENTICATED_CONNECTIONS_METRIC, {inc, 1}}),
+                            {next_state, idle, State#state{ peer_name = LoginString }};
+                        _ ->
+                            Transport:send(Socket, session_utils:make_server_frame([
+                                ?LOGIN_TAG,
+                                session_utils:encode_auth_response(already_authenticated)
+                            ])),
+                            {stop, already_auth, State}
+                    end;
                 {error, not_found} ->
                     ?ERROR("Client session ~p failed authentication as ~s (no such login found)",[self(), LoginString]),
                     Transport:send(
