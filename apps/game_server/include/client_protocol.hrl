@@ -84,6 +84,8 @@
 -define( TOP_TAG, 3 ).
 -define( SERVER_STATUS_TAG, 4).
 
+-define( PEER_STATUS_TAG, 5 ).
+
 
 
 -endif.
