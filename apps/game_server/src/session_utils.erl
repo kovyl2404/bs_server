@@ -134,8 +134,8 @@ encode_top_response(Top) ->
     Count = length(Top),
     TopData =
         lists:foldl(
-            fun({Rank, Login}, Acc) ->
-                [<<Rank:4/unsigned-big-integer-unit:8>>, allign_string(Login, 32) | Acc]
+            fun({Login, Rank}, Acc) ->
+                [ [allign_string(Login, 32), <<Rank:4/unsigned-big-integer-unit:8>>] | Acc ]
             end, [], lists:reverse(Top)
         ),
     [

@@ -296,7 +296,7 @@ handle_info(
     case orddict:find(Tag, ReconnectTimers) of
         {ok, TimerId} ->
             folsom_metrics:notify({?TIMEDOUT_GAMES_METRIC, 1}),
-            ?INFO("Game ~s vs ~s stopped because of ~p was not reconnected in time", [FirstLabel, SecondLabel, DisconnectedLabel]),
+            ?INFO("Game ~s vs ~s stopped because of ~s was not reconnected in time", [FirstLabel, SecondLabel, DisconnectedLabel]),
             {stop, normal, State};
         _ ->
             {noreply, State}
