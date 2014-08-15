@@ -572,15 +572,31 @@ handle_info( #peer_surrender{}, running_game, State ) ->
 handle_info(
     #peer_lost{ },
     running_game,
-    #state{} = State
+    #state{
+        socket = Socket,
+        transport = Transport
+    } = State
 ) ->
+    SendFrame =
+        session_utils:make_server_frame(
+            [?PEER_STATUS_TAG, session_utils:encode_peer_status(false)]
+        ),
+    Transport:send(Socket, SendFrame),
     {next_state, running_game, State};
 
 handle_info(
     #peer_reset{ },
     running_game,
-    #state{} = State
+    #state{
+        socket = Socket,
+        transport = Transport
+    } = State
 ) ->
+    SendFrame =
+        session_utils:make_server_frame(
+            [?PEER_STATUS_TAG, session_utils:encode_peer_status(true)]
+        ),
+    Transport:send(Socket, SendFrame),
     {next_state, running_game, State};
 
 handle_info(
@@ -614,6 +630,8 @@ terminate(
     handle_terminate_reason(Reason),
     ok.
 
+handle_terminate_reason(already_authenticated) ->
+    folsom_metrics:notify({?GAME_SERVER_PROTOCOL_VIOLATIONS, 1});
 handle_terminate_reason(not_auth) ->
     folsom_metrics:notify({?GAME_SERVER_PROTOCOL_VIOLATIONS, 1});
 handle_terminate_reason(protocol_violation) ->

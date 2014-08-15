@@ -23,7 +23,8 @@
     decode_server_status_request/1,
     encode_server_status_request/1,
     encode_server_status_response/4,
-    get_basic_metrics/0
+    get_basic_metrics/0,
+    encode_peer_status/1
 ]).
 
 make_server_frame(Iolist) ->
@@ -133,8 +134,8 @@ encode_top_response(Top) ->
     Count = length(Top),
     TopData =
         lists:foldl(
-            fun({Rank, Login}, Acc) ->
-                [<<Rank:4/unsigned-big-integer-unit:8>>, allign_string(Login, 32) | Acc]
+            fun({Login, Rank}, Acc) ->
+                [ [allign_string(Login, 32), <<Rank:4/unsigned-big-integer-unit:8>>] | Acc ]
             end, [], lists:reverse(Top)
         ),
     [
@@ -173,6 +174,11 @@ decode_server_status_request(_) ->
 
 encode_server_status_request(ClientVersion) ->
     <<ClientVersion:2/big-unsigned-integer-unit:8>>.
+
+encode_peer_status(true) ->
+    <<1>>;
+encode_peer_status(false) ->
+   <<0>>.
 
 encode_server_status_response(IsVersionSupported, TotalConnections, RunningGames, WaitingGames) ->
     SupportedFlag = case IsVersionSupported of true -> 1; false -> 0 end,
