@@ -108,6 +108,53 @@ handle_sync_event(_, _, _StateName, State) ->
     {stop, unexpected_sync_event, State}.
 
 guest(
+    {data, <<?RESET_PASSWORD_REQUEST_TAG, RequestData/binary>>},
+    #state{
+        profile_backend = ProfileBackend,
+        transport = Transport,
+        socket = Socket
+    } = State
+) when ProfileBackend =/= undefined ->
+    {ok, Login} = session_utils:decode_password_reset_request(RequestData),
+    SendFrame =
+        case ProfileBackend:get_by_id(Login) of
+            {ok, Profile} ->
+                ok = password_manager:request(Profile),
+                session_utils:encode_password_reset_response(ok);
+            {error, not_found} ->
+                session_utils:encode_password_reset_response(incorrect_login)
+        end,
+    Transport:send(Socket, session_utils:make_server_frame([ ?RESET_PASSWORD_REQUEST_TAG, SendFrame ])),
+    {next_state, guest, State};
+
+guest(
+    {data, <<?COMMIT_PASSWORD_REQUEST_TAG, RequestData/binary>>},
+    #state{
+        profile_backend = ProfileBackend,
+        socket = Socket,
+        transport = Transport
+    } = State
+) when ProfileBackend =/= undefined ->
+    {ok, Login, ConfirmationCode, NewPassword} = session_utils:decode_commit_password_request(RequestData),
+    SendFrame =
+        case ProfileBackend:get_by_id(Login) of
+            {ok, Profile} ->
+                CommitResult =
+                    case password_manager:commit(Profile, ConfirmationCode) of
+                        ok ->
+                            ok = ProfileBackend:change_password(Login, NewPassword),
+                            ok;
+                        {error, Reason} ->
+                            Reason
+                    end,
+                session_utils:encode_commit_password_result(CommitResult);
+            {error, not_found} ->
+                session_utils:encode_commit_password_result(incorrect_login)
+        end,
+    Transport:send(Socket, session_utils:make_server_frame([ ?COMMIT_PASSWORD_REQUEST_TAG, SendFrame ])),
+    {next_state, guest, State};
+
+guest(
     {data, <<?LOGIN_TAG, AuthRequest/binary>>},
     #state{
         profile_backend = ProfileBackend,
@@ -241,6 +288,54 @@ guest(
 
 guest(_, State) ->
     {stop, not_auth, State}.
+
+
+idle(
+    {data, <<?RESET_PASSWORD_REQUEST_TAG, RequestData/binary>>},
+    #state{
+        profile_backend = ProfileBackend,
+        transport = Transport,
+        socket = Socket
+    } = State
+) when ProfileBackend =/= undefined ->
+    {ok, Login} = session_utils:decode_password_reset_request(RequestData),
+    SendFrame =
+        case ProfileBackend:get_by_id(Login) of
+            {ok, Profile} ->
+                ok = password_manager:request(Profile),
+                session_utils:encode_password_reset_response(ok);
+            {error, not_found} ->
+                session_utils:encode_password_reset_response(incorrect_login)
+        end,
+    Transport:send(Socket, session_utils:make_server_frame([ ?RESET_PASSWORD_REQUEST_TAG, SendFrame ])),
+    {next_state, idle, State};
+
+idle(
+    {data, <<?COMMIT_PASSWORD_REQUEST_TAG, RequestData/binary>>},
+    #state{
+        profile_backend = ProfileBackend,
+        socket = Socket,
+        transport = Transport
+    } = State
+) when ProfileBackend =/= undefined ->
+    {ok, Login, ConfirmationCode, NewPassword} = session_utils:decode_commit_password_request(RequestData),
+    SendFrame =
+        case ProfileBackend:get_by_id(Login) of
+            {ok, Profile} ->
+                CommitResult =
+                    case password_manager:commit(Profile, ConfirmationCode) of
+                        ok ->
+                            ok = ProfileBackend:change_password(Login, NewPassword),
+                            ok;
+                        {error, Reason} ->
+                            Reason
+                    end,
+                session_utils:encode_commit_password_result(CommitResult);
+            {error, not_found} ->
+                session_utils:encode_commit_password_result(incorrect_login)
+        end,
+    Transport:send(Socket, session_utils:make_server_frame([ ?COMMIT_PASSWORD_REQUEST_TAG, SendFrame ])),
+    {next_state, idle, State};
 
 idle(
     {command, ?START_GAME_PACKET(?NEW_GAME_FLAG)},

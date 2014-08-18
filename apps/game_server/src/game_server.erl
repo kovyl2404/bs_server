@@ -73,7 +73,7 @@ start(_StartType, _StartArgs) ->
     case StartResult of
         {ok, _} ->
             ?WARNING("New game server started with transport ~p",[TransportOptions]),
-            client_session_sup:start_link();
+            game_server_sup:start_link();
         Error ->
             ?CRITICAL("Could not start game server with transport ~p because of ~p",[TransportOptions, Error]),
             Error

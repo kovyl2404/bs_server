@@ -220,11 +220,11 @@ register_in_idle_state_test_() ->
 
 request_top_test_() ->
     Top = [
-        {10, <<"user1">>},
-        {5, <<"user2">>},
-        {3, <<"user5">>},
-        {2, <<"user3">>},
-        {1, <<"user4">>}
+        {<<"user1">>, 10},
+        {<<"user2">>, 5},
+        {<<"user5">>, 3},
+        {<<"user3">>, 2},
+        {<<"user4">>, 1}
     ],
     fixture(
         fun(_) ->
@@ -266,11 +266,11 @@ request_top_test_() ->
 
 request_top_few_data_test_() ->
     Top = [
-        {10, <<"user1">>},
-        {5, <<"user2">>},
-        {3, <<"user5">>},
-        {2, <<"user3">>},
-        {1, <<"user4">>}
+        {<<"user1">>, 10},
+        {<<"user2">>, 5},
+        {<<"user5">>, 3},
+        {<<"user3">>, 2},
+        {<<"user4">>, 1}
     ],
     fixture(
         fun(_) ->

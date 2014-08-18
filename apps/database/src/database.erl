@@ -9,7 +9,8 @@
     set_field/3,
     get_top/1,
     update_profile/2,
-    reinitialize/0
+    reinitialize/0,
+    change_password/2
 ]).
 
 -compile([
@@ -188,6 +189,19 @@ update_profile(NewProfileVersion, Login) ->
             Error
     end.
 
+
+change_password(Profile, NewPassword) ->
+    NewProfile = [
+        {<<"password">>, bin_to_hex(crypto:hash(md5, NewPassword))}
+        | proplists:delete(<<"password">>, Profile)
+    ],
+    {BackendModule, BackendState} = get_backend(),
+    case BackendModule:create_profile( {NewProfile}, BackendState ) of
+        {ok, {Doc}} ->
+            {ok, Doc};
+        {error, _} = Error ->
+            Error
+    end.
 
 update_fields(Profile, NewProfileVersion) ->
     SortedProfile = orddict:from_list(Profile),

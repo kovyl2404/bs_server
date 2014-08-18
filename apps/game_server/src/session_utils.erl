@@ -24,7 +24,12 @@
     encode_server_status_request/1,
     encode_server_status_response/4,
     get_basic_metrics/0,
-    encode_peer_status/1
+    encode_peer_status/1,
+    encode_password_reset_request/1,
+    decode_password_reset_request/1,
+    encode_password_reset_response/1,
+    decode_commit_password_request/1,
+    encode_commit_password_result/1
 ]).
 
 make_server_frame(Iolist) ->
@@ -193,3 +198,45 @@ get_basic_metrics() ->
     GamesWaiting = folsom_metrics:get_metric_value(?WAITING_GAMES_METRIC),
     GamesRunning = folsom_metrics:get_metric_value(?RUNNING_GAMES_METRIC),
     {ClientConnections, GamesRunning, GamesWaiting}.
+
+
+decode_password_reset_request(Data) ->
+    case Data of
+        <<_:32/binary-unit:8>> ->
+            {ok, strip_trailing_zeros(Data)};
+        _ ->
+            {error, invalid_packet}
+    end.
+
+encode_password_reset_request(Login) ->
+    allign_string(Login, 32).
+
+encode_password_reset_response(ok) ->
+    <<0>>;
+encode_password_reset_response(incorrect_login) ->
+    <<1>>.
+
+decode_commit_password_request(Data) ->
+    case Data of
+        <<
+            Login:32/binary-unit:8,
+            ConfirmationCode:32/binary-unit:8,
+            NewPassword:32/binary-unit:8
+        >> ->
+            {ok,
+                strip_trailing_zeros(Login),
+                strip_trailing_zeros(ConfirmationCode),
+                strip_trailing_zeros(NewPassword)
+            };
+        _ ->
+            {error, invalid_packet}
+    end.
+
+encode_commit_password_result(ok) ->
+    <<0>>;
+encode_commit_password_result(incorrect_login) ->
+    <<1>>;
+encode_commit_password_result(request_expired) ->
+    <<2>>;
+encode_commit_password_result(invalid_code) ->
+    <<3>>.
