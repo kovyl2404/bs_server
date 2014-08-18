@@ -61,8 +61,8 @@ no_server_test_() ->
         ]
     ),
     StartResult = application:start(database),
-    FailRegister = database:register(<<"user">>, <<"123">>),
-    FailLogin = database:register(<<"user">>, <<"123">>),
+    FailRegister = database:register(<<"user">>, <<"123">>, <<"somewho@example.com">>),
+    FailLogin = database:register(<<"user">>, <<"123">>, <<"another@example.com">>),
     FailUpdate = database:update_profile(<<"used">>, []),
     StopResult = application:stop(database),
 
@@ -116,7 +116,7 @@ login_no_user_test_() ->
 register_test_() ->
     fixture(
         fun(_) ->
-            RegisterResult = maybe_sort_list(database:register(<<"kovyl">>, <<"qwerty">>)),
+            RegisterResult = maybe_sort_list(database:register(<<"kovyl">>, <<"qwerty">>, <<"somewho@example.com">>)),
             LoginResult = maybe_sort_list(database:login(<<"kovyl">>, <<"qwerty">>)),
             [
                 ?_assertMatch({ok, _}, RegisterResult),
@@ -129,8 +129,8 @@ register_test_() ->
 register_existed_login_test_() ->
     fixture(
         fun(_) ->
-            {ok, _} = database:register(<<"kovyl">>, <<"qwerty">>),
-            RegisterAgain = database:register(<<"kovyl">>, <<"ytrewq">>),
+            {ok, _} = database:register(<<"kovyl">>, <<"qwerty">>, <<"somewho@example.com">>),
+            RegisterAgain = database:register(<<"kovyl">>, <<"ytrewq">>, <<"somewho@example.com">>),
             [
                 ?_assertEqual({error, already_registered}, RegisterAgain)
             ]
@@ -140,7 +140,7 @@ register_existed_login_test_() ->
 login_invalid_password_test_() ->
     fixture(
         fun(_) ->
-            {ok, _} = database:register(<<"kovyl">>, <<"qwerty">>),
+            {ok, _} = database:register(<<"kovyl">>, <<"qwerty">>, <<"somewho@example.com">>),
             RegisterAgain = database:login(<<"kovyl">>, <<"ytrewq">>),
             [
                 ?_assertEqual({error, incorrect_password}, RegisterAgain)
@@ -151,7 +151,7 @@ login_invalid_password_test_() ->
 get_profile_test_() ->
     fixture(
         fun(_) ->
-            {ok, Profile} = maybe_sort_list(database:register(<<"kovyl">>, <<"qwerty">>)),
+            {ok, Profile} = maybe_sort_list(database:register(<<"kovyl">>, <<"qwerty">>, <<"somewho@example.com">>)),
             GetProfile = maybe_sort_list(database:get_by_id(<<"kovyl">>)),
             [
                 ?_assertEqual({ok, Profile}, GetProfile)
@@ -163,7 +163,7 @@ get_profile_test_() ->
 update_profile_test_() ->
     fixture(
         fun(_) ->
-            {ok, _} = database:register(<<"user1">>, <<"qwerty">>),
+            {ok, _} = database:register(<<"user1">>, <<"qwerty">>, <<"somewho@example.com">>),
             {ok, UpdatedProfile} =
                 database:update_profile(
                     [
@@ -192,15 +192,15 @@ get_top_test_() ->
     fixture(
         fun(_) ->
 
-            database:register(<<"user1">>, <<"qwerty">>),
-            database:register(<<"user2">>, <<"qwerty">>),
-            database:register(<<"user3">>, <<"qwerty">>),
-            database:register(<<"user4">>, <<"qwerty">>),
-            database:register(<<"user5">>, <<"qwerty">>),
-            database:register(<<"user6">>, <<"qwerty">>),
-            database:register(<<"user7">>, <<"qwerty">>),
-            database:register(<<"user8">>, <<"qwerty">>),
-            database:register(<<"user9">>, <<"qwerty">>),
+            database:register(<<"user1">>, <<"qwerty">>, <<"somewho@example.com">>),
+            database:register(<<"user2">>, <<"qwerty">>, <<"somewho@example.com">>),
+            database:register(<<"user3">>, <<"qwerty">>, <<"somewho@example.com">>),
+            database:register(<<"user4">>, <<"qwerty">>, <<"somewho@example.com">>),
+            database:register(<<"user5">>, <<"qwerty">>, <<"somewho@example.com">>),
+            database:register(<<"user6">>, <<"qwerty">>, <<"somewho@example.com">>),
+            database:register(<<"user7">>, <<"qwerty">>, <<"somewho@example.com">>),
+            database:register(<<"user8">>, <<"qwerty">>, <<"somewho@example.com">>),
+            database:register(<<"user9">>, <<"qwerty">>, <<"somewho@example.com">>),
 
             database:set_field(<<"score">>, 5, <<"user1">>),
             database:set_field(<<"score">>, 3, <<"user2">>),

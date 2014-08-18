@@ -16,7 +16,7 @@
     send_notification/3
 ]).
 
--export([start_smtp/0, stop_smtp/0]).
+-export([start_smtp/0, stop_smtp/0, start/0]).
 
 %% Application callbacks
 -export([start/2, stop/1]).
@@ -105,6 +105,11 @@ stop_smtp() ->
     application:stop(asn1),
     application:stop(crypto).
 
+start() ->
+    application:start(merl),
+    application:start(erlydtl),
+    start_smtp(),
+    application:start(notifications).
 
 
 

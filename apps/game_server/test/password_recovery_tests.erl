@@ -28,19 +28,19 @@ guest_recovery_test_() ->
             ResetPasswordRequest =
                 iolist_to_binary([
                     ?RESET_PASSWORD_REQUEST_TAG,
-                    session_utils:encode_password_reset_request(<<"login">>)
+                    session_utils:encode_password_reset_request(<<"somewho">>)
                 ]),
             MockProfile = [
                 {<<"email">>, <<"some@example.com">>},
                 {<<"login">>, <<"somewho">>}
             ],
             ok = meck:expect( database, get_by_id, 1, {ok, MockProfile} ),
-            ok = meck:expect( password_manager, request, 1, meck:val(ok)),
+            ok = meck:expect( password_manager, request, 2, meck:val(ok)),
             ok = meck:expect( mock_session_writer, send, 2, meck:val(ok)),
 
             {next_state, NewStateName, _NewState} = client_session:guest({data, ResetPasswordRequest}, State),
 
-            ResetRequested = meck:called(password_manager, request, [MockProfile]),
+            ResetRequested = meck:called(password_manager, request, [<<"somewho">>, MockProfile]),
             ResponseSent = meck:called(mock_session_writer, send, [mock, '_']),
 
             [
@@ -71,19 +71,19 @@ idle_recovery_test_() ->
             ResetPasswordRequest =
                 iolist_to_binary([
                     ?RESET_PASSWORD_REQUEST_TAG,
-                    session_utils:encode_password_reset_request(<<"login">>)
+                    session_utils:encode_password_reset_request(<<"somewho">>)
                 ]),
             MockProfile = [
                 {<<"email">>, <<"some@example.com">>},
                 {<<"login">>, <<"somewho">>}
             ],
             ok = meck:expect( database, get_by_id, 1, {ok, MockProfile} ),
-            ok = meck:expect( password_manager, request, 1, meck:val(ok)),
+            ok = meck:expect( password_manager, request, 2, meck:val(ok)),
             ok = meck:expect( mock_session_writer, send, 2, meck:val(ok)),
 
             {next_state, NewStateName, _NewState} = client_session:idle({data, ResetPasswordRequest}, State),
 
-            ResetRequested = meck:called(password_manager, request, [MockProfile]),
+            ResetRequested = meck:called(password_manager, request, [<<"somewho">>, MockProfile]),
             ResponseSent = meck:called(mock_session_writer, send, [mock, '_']),
 
             [

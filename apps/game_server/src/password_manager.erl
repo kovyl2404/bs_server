@@ -13,7 +13,7 @@
 -export([start_link/1]).
 
 -export([
-    request/1,
+    request/2,
     commit/2
 ]).
 
@@ -40,11 +40,13 @@
 start_link(Params) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, Params, []).
 
-request(Profile) ->
-    Login = proplists:get_value(<<"login">>, Profile),
+request(Login, Profile) ->
     Email = proplists:get_value(<<"email">>, Profile),
     case Email of
         undefined ->
+            ?ERROR("User ~s have no email, can't send password recovery notification",[Login]),
+            {error, email_not_found};
+        <<"">> ->
             ?ERROR("User ~s have no email, can't send password recovery notification",[Login]),
             {error, email_not_found};
         _ ->
@@ -65,8 +67,7 @@ request(Profile) ->
             ?INFO("Password reset notification for ~s (~s): result is ~p", [Email, Login, SendNotificationResult])
     end.
 
-commit(Profile, ConfirmationCode) ->
-    Login = proplists:get_value(login, Profile),
+commit(Login, ConfirmationCode) ->
     gen_server:call(?SERVER, {commit, Login, ConfirmationCode}).
 
 
@@ -88,14 +89,14 @@ handle_call(
     _From,
     #state{
         request_timeout = RequestTimeout
-    }
+    } = State
 ) ->
     true = ets:insert(?MODULE, {Login, ConfirmationCode}),
     erlang:send_after(
         RequestTimeout, self(),
         {request_expired, Login, ConfirmationCode}
     ),
-    ok;
+    {reply, ok, State};
 handle_call(
     {commit, Login, ConfirmationCode},
     _From,
@@ -103,6 +104,7 @@ handle_call(
 ) ->
     case ets:lookup(?MODULE, Login) of
         [{Login, ConfirmationCode}] ->
+            ets:delete_object(?MODULE, {Login, ConfirmationCode}),
             {reply, ok, State};
         [{Login, _}] ->
             {reply, {error, invalid_code}, State};
@@ -146,7 +148,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 get_random_string(Length, AllowedChars) ->
-    lists:foldl(fun(_, Acc) ->
-        [lists:nth(random:uniform(length(AllowedChars)),
-            AllowedChars) | Acc]
-    end, [], lists:seq(1, Length)).
+    list_to_binary(
+        lists:foldl(fun(_, Acc) ->
+            [lists:nth(random:uniform(length(AllowedChars)),
+                AllowedChars) | Acc]
+        end, [], lists:seq(1, Length))
+    ).

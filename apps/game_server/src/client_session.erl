@@ -69,6 +69,7 @@ send_ping(Session, SeqId) ->
 
 init({Socket, Transport, PeerName}) ->
     ProfileBackend = profile_backend(),
+    random:seed(),
     InitState =
         case ProfileBackend of
             undefined -> idle;
@@ -119,7 +120,7 @@ guest(
     SendFrame =
         case ProfileBackend:get_by_id(Login) of
             {ok, Profile} ->
-                ok = password_manager:request(Profile),
+                ok = password_manager:request(Login, Profile),
                 session_utils:encode_password_reset_response(ok);
             {error, not_found} ->
                 session_utils:encode_password_reset_response(incorrect_login)
@@ -140,7 +141,7 @@ guest(
         case ProfileBackend:get_by_id(Login) of
             {ok, Profile} ->
                 CommitResult =
-                    case password_manager:commit(Profile, ConfirmationCode) of
+                    case password_manager:commit(Login, ConfirmationCode) of
                         ok ->
                             ok = ProfileBackend:change_password(Login, NewPassword),
                             ok;
@@ -219,11 +220,11 @@ guest(
     } = State
 ) ->
     ?DEBUG("Client session ~p (guest) received register request ~p",[self(), RegisterRequest]),
-    case session_utils:decode_auth_request(RegisterRequest) of
-        {ok, {Login, Password}} ->
+    case session_utils:decode_register_request(RegisterRequest) of
+        {ok, {Login, Password, Email}} ->
             LoginString = unicode:characters_to_list(Login, utf8),
-            ?DEBUG("Client session ~p trying to register with login ~s and password ~p",[self(), LoginString, Password]),
-            case ProfileBackend:register(Login, Password) of
+            ?DEBUG("Client session ~p trying to register with login ~s (~s) and password ~p",[self(), LoginString, Email, Password]),
+            case ProfileBackend:register(Login, Password, Email) of
                 {ok, Profile} ->
                     ?DEBUG("Client session ~p successfully registered", [self()]),
                     EncodedProfile = session_utils:encode_profile_request(Profile),
@@ -302,7 +303,7 @@ idle(
     SendFrame =
         case ProfileBackend:get_by_id(Login) of
             {ok, Profile} ->
-                ok = password_manager:request(Profile),
+                ok = password_manager:request(Login, Profile),
                 session_utils:encode_password_reset_response(ok);
             {error, not_found} ->
                 session_utils:encode_password_reset_response(incorrect_login)
@@ -321,9 +322,9 @@ idle(
     {ok, Login, ConfirmationCode, NewPassword} = session_utils:decode_commit_password_request(RequestData),
     SendFrame =
         case ProfileBackend:get_by_id(Login) of
-            {ok, Profile} ->
+            {ok, _} ->
                 CommitResult =
-                    case password_manager:commit(Profile, ConfirmationCode) of
+                    case password_manager:commit(Login, ConfirmationCode) of
                         ok ->
                             ok = ProfileBackend:change_password(Login, NewPassword),
                             ok;
