@@ -1,0 +1,26 @@
+{application, notifications,
+ [
+  {description, ""},
+  {vsn, "1.0.0"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  erlydtl,
+                  gen_smtp
+                 ]},
+  {mod, { notifications, []}},
+  {env, [
+      {handlers, [
+          {smtp_notification_handler, [
+              {smtp, [
+                  {username, "battleship@etcpasswd.ru"},
+                  {password, "b@ttleship"},
+                  {relay, "smtp.yandex.ru"}
+              ]},
+              {from_field, "Battleship notification service"},
+              {email_type, "plain"}
+          ]}
+      ]}
+  ]}
+ ]}.

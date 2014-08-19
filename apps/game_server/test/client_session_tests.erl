@@ -86,7 +86,8 @@ register_test_() ->
         {<<"reserved7">>, 7},
         {<<"score">>, 100},
         {<<"achievements">>, [1,2,3,4,5,6,7,8]},
-        {<<"timestamp">>, 12345}
+        {<<"timestamp">>, 12345},
+        {<<"email">>, <<"somewho@example.net">>}
     ],
     fixture(
         fun(_) ->
@@ -105,15 +106,19 @@ register_test_() ->
             ok =
                 meck:expect(
                     database, register,
-                    fun(Login, Password) ->
-                        TestHost ! {self(), {register, Login, Password}},
+                    fun(Login, Password, Email) ->
+                        TestHost ! {self(), {register, Login, Password, Email}},
                         {ok, Profile}
                     end
                 ),
 
             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
             MonitorRef = monitor(process, RemoteClientPid),
-            RegisterRequest = iolist_to_binary([ <<?REGISTER_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
+            RegisterRequest =
+                iolist_to_binary([
+                    <<?REGISTER_TAG>>,
+                    session_utils:encode_register_request(<<"login">>, <<"password">>, <<"somewho@example.net">>)
+                ]),
             ok = client_session:send_command(
                 RemoteClientPid, {data, RegisterRequest}
             ),
@@ -129,7 +134,7 @@ register_test_() ->
 
             [
                 ?_assertEqual({error, timeout}, SessionDown),
-                ?_assertEqual({ok, {register, <<"login">>, <<"password">>}}, RegisterInDatabase),
+                ?_assertEqual({ok, {register, <<"login">>, <<"password">>, <<"somewho@example.net">>}}, RegisterInDatabase),
                 ?_assertEqual({ok, [
                     {data, <<?REGISTER_TAG, 0>>}, {data, ExpectedProfileFrame}
                 ]}, RegisterOkResponse)
@@ -156,15 +161,18 @@ invalid_register_test_() ->
             ok =
                 meck:expect(
                     database, register,
-                    fun(Login, Password) ->
-                        TestHost ! {self(), {register, Login, Password}},
+                    fun(Login, Password, Email) ->
+                        TestHost ! {self(), {register, Login, Password, Email}},
                         {error, already_registered}
                     end
                 ),
 
             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
             MonitorRef = monitor(process, RemoteClientPid),
-            RegisterRequest = iolist_to_binary([ <<?REGISTER_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
+            RegisterRequest = iolist_to_binary([
+                <<?REGISTER_TAG>>,
+                session_utils:encode_register_request(<<"login">>, <<"password">>, <<"somewho@example.net">>)
+            ]),
             ok = client_session:send_command(
                 RemoteClientPid, {data, RegisterRequest}
             ),
@@ -178,7 +186,7 @@ invalid_register_test_() ->
             ok = meck:unload(database),
             [
                 ?_assertEqual({error, timeout}, SessionAlive),
-                ?_assertEqual({ok, {register, <<"login">>, <<"password">>}}, RegisterInDatabase),
+                ?_assertEqual({ok, {register, <<"login">>, <<"password">>, <<"somewho@example.net">>}}, RegisterInDatabase),
                 ?_assertEqual({ok, [{data, <<?REGISTER_TAG, 1>>}]}, RegisterOkResponse),
                 ?_assertEqual({ok, not_auth}, SessionDown)
             ]
@@ -204,7 +212,9 @@ register_in_idle_state_test_() ->
 
             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
             MonitorRef = monitor(process, RemoteClientPid),
-            RegisterRequest = iolist_to_binary([ <<?REGISTER_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
+            RegisterRequest = iolist_to_binary([
+                <<?REGISTER_TAG>>, session_utils:encode_register_request(<<"login">>, <<"password">>, <<"somewho@example.net">>)
+            ]),
             ok = client_session:send_command(
                 RemoteClientPid, {data, RegisterRequest}
             ),
@@ -220,11 +230,11 @@ register_in_idle_state_test_() ->
 
 request_top_test_() ->
     Top = [
-        {10, <<"user1">>},
-        {5, <<"user2">>},
-        {3, <<"user5">>},
-        {2, <<"user3">>},
-        {1, <<"user4">>}
+        {<<"user1">>, 10},
+        {<<"user2">>, 5},
+        {<<"user5">>, 3},
+        {<<"user3">>, 2},
+        {<<"user4">>, 1}
     ],
     fixture(
         fun(_) ->
@@ -266,11 +276,11 @@ request_top_test_() ->
 
 request_top_few_data_test_() ->
     Top = [
-        {10, <<"user1">>},
-        {5, <<"user2">>},
-        {3, <<"user5">>},
-        {2, <<"user3">>},
-        {1, <<"user4">>}
+        {<<"user1">>, 10},
+        {<<"user2">>, 5},
+        {<<"user5">>, 3},
+        {<<"user3">>, 2},
+        {<<"user4">>, 1}
     ],
     fixture(
         fun(_) ->
@@ -323,7 +333,8 @@ login_test_() ->
         {<<"reserved7">>, 7},
         {<<"score">>, 100},
         {<<"achievements">>, [1,2,3,4,5,6,7,8]},
-        {<<"timestamp">>, 12345}
+        {<<"timestamp">>, 12345},
+        {<<"email">>, <<"somewho@example.net">>}
     ],
     fixture(
         fun(_) ->
@@ -350,7 +361,10 @@ login_test_() ->
 
             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
             MonitorRef = monitor(process, RemoteClientPid),
-            RegisterRequest = iolist_to_binary([ <<?LOGIN_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
+            RegisterRequest = iolist_to_binary([
+                <<?LOGIN_TAG>>,
+                session_utils:encode_auth_request(<<"login">>, <<"password">>)
+            ]),
             ok = client_session:send_command(
                 RemoteClientPid, {data, RegisterRequest}
             ),
@@ -387,7 +401,8 @@ update_profile_not_auth_test_() ->
         {<<"reserved7">>, 7},
         {<<"score">>, 100},
         {<<"achievements">>, [1,2,3,4,5,6,7,8]},
-        {<<"timestamp">>, 7890}
+        {<<"timestamp">>, 7890},
+        {<<"email">>, <<"somewho@example.net">>}
     ],
     fixture(
         fun(_) ->
@@ -434,7 +449,8 @@ update_profile_test_() ->
         {<<"reserved7">>, 7},
         {<<"score">>, 100},
         {<<"achievements">>, [1,2,3,4,5,6,7,8]},
-        {<<"timestamp">>, 12345}
+        {<<"timestamp">>, 12345},
+        {<<"email">>, <<"somewho@example.net">>}
     ],
     fixture(
         fun(_) ->
@@ -470,7 +486,10 @@ update_profile_test_() ->
             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
             MonitorRef = monitor(process, RemoteClientPid),
 
-            LoginRequest = iolist_to_binary([ <<?LOGIN_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
+            LoginRequest = iolist_to_binary([
+                <<?LOGIN_TAG>>,
+                session_utils:encode_auth_request(<<"login">>, <<"password">>)
+            ]),
             ok = client_session:send_command( RemoteClientPid, {data, LoginRequest} ),
             {ok, {login, <<"login">>, <<"password">>}} =
                 lobby_utils:wait_from_pid(RemoteClientPid, 100),
@@ -523,7 +542,9 @@ invalid_login_test_() ->
 
             {ok, RemoteClientPid} = client_session:start(mock, mock_session_writer),
             MonitorRef = monitor(process, RemoteClientPid),
-            RegisterRequest = iolist_to_binary([ <<?LOGIN_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)]),
+            RegisterRequest = iolist_to_binary([
+                <<?LOGIN_TAG>>, session_utils:encode_auth_request(<<"login">>, <<"password">>)
+            ]),
             ok = client_session:send_command(
                 RemoteClientPid, {data, RegisterRequest}
             ),

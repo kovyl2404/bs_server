@@ -35,7 +35,7 @@ register_test_() ->
             client_emulator:stop(Emulator)
         end,
         fun(Emulator) ->
-            ok = client_emulator:register(Emulator, <<"user1">>, <<"qwerty">>),
+            ok = client_emulator:register(Emulator, <<"user1">>, <<"qwerty">>, <<"somewho@example.com">>),
             RegisterOk = lobby_utils:wait_from_pid(Emulator, 1000),
             Profile = lobby_utils:wait_from_pid(Emulator, 1000),
 
@@ -65,12 +65,12 @@ already_registered_test_() ->
             client_emulator:stop(Emulator)
         end,
         fun(Emulator) ->
-            ok = client_emulator:register(Emulator, <<"user2">>, <<"qwerty">>),
+            ok = client_emulator:register(Emulator, <<"user2">>, <<"qwerty">>, <<"somewho@example.com">>),
             {ok, _} = lobby_utils:wait_from_pid(Emulator, 1000),
             {ok, _} = lobby_utils:wait_from_pid(Emulator, 1000),
 
             {ok, AnotherEmulator} = client_emulator:start("localhost", 7890),
-            ok = client_emulator:register(AnotherEmulator, <<"user2">>, <<"qwerty">>),
+            ok = client_emulator:register(AnotherEmulator, <<"user2">>, <<"qwerty">>, <<"another@email.com">>),
             RegisterFail = lobby_utils:wait_from_pid(AnotherEmulator, 1000),
             NoProfile = lobby_utils:wait_from_pid(AnotherEmulator, 1000),
             ok = client_emulator:stop(AnotherEmulator),
@@ -92,7 +92,7 @@ update_profile_test_() ->
             client_emulator:stop(Emulator)
         end,
         fun(Emulator) ->
-            ok = client_emulator:register(Emulator, <<"user3">>, <<"qwerty">>),
+            ok = client_emulator:register(Emulator, <<"user3">>, <<"qwerty">>, <<"somewho@example.com">>),
             {ok, {register, ok}} = lobby_utils:wait_from_pid(Emulator, 1000),
             {ok, {profile, RawProfile}} = lobby_utils:wait_from_pid(Emulator, 1000),
             Profile = orddict:from_list(RawProfile),

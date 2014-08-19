@@ -83,6 +83,10 @@
 -define( PROFILE_TAG, 2 ).
 -define( TOP_TAG, 3 ).
 -define( SERVER_STATUS_TAG, 4).
+-define( PEER_STATUS_TAG, 5 ).
+
+-define( RESET_PASSWORD_REQUEST_TAG, 6).
+-define( COMMIT_PASSWORD_REQUEST_TAG, 7).
 
 
 

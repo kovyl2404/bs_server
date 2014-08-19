@@ -18,6 +18,7 @@
       {profile, undefined},
       {max_pings_allowed, 5},
       {ping_interval_sec, 1},
-      {port, 7890}
+      {port, 7890},
+      {password_reset_timeout, 3600}
   ]}
  ]}.

@@ -10,7 +10,7 @@
 -export([
     start/2,
     stop/1,
-    register/3,
+    register/4,
     login/3,
     start_game/1,
     stop_game/1,
@@ -50,8 +50,8 @@ start(Host, Port) ->
 stop(Pid) ->
     gen_server:cast(Pid, stop).
 
-register(ClientEmulator, Login, Password) ->
-    gen_server:cast(ClientEmulator, {register, Login, Password}).
+register(ClientEmulator, Login, Password, Email) ->
+    gen_server:cast(ClientEmulator, {register, Login, Password, Email}).
 
 login(ClientEmulator, Login, Password) ->
     gen_server:cast(ClientEmulator, {login, Login, Password}).
@@ -116,7 +116,7 @@ handle_cast(
     {noreply, State};
 
 handle_cast(
-    {register, Login, Password},
+    {register, Login, Password, Email},
     #state{
         socket = Socket
     } = State
@@ -125,7 +125,7 @@ handle_cast(
         Socket,
         session_utils:make_server_frame([
             ?REGISTER_TAG,
-            session_utils:encode_auth_request(Login, Password)
+            session_utils:encode_register_request(Login, Password, Email)
         ])
     ),
     {noreply, State};

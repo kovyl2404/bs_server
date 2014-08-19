@@ -84,7 +84,7 @@ init({
     erlang:monitor(process, SecondPid),
     FirstPid ! #game_start{tag = FirstTag, session_pid = self(), token = Token, turn = true },
     SecondPid ! #game_start{ tag = SecondTag, session_pid = self(), token = Token, turn = false },
-    ?INFO("New game started for ~p and ~p",[FirstLabel, SecondLabel]),
+    ?INFO("New game started for ~s and ~s",[FirstLabel, SecondLabel]),
     {ok, #state{
         game_token = Token,
         peer_tags = orddict:from_list([
@@ -92,7 +92,7 @@ init({
         ]),
         peer_queue = [ FirstTag, SecondTag ],
         peer_labels = orddict:from_list([
-            {FirstTag, FirstLabel}, {SecondTag, FirstLabel}
+            {FirstTag, FirstLabel}, {SecondTag, SecondLabel}
         ]),
         last_turn = undefined
     }}.
@@ -119,7 +119,7 @@ handle_call(
     case orddict:find(Tag, PeerTags) of
         {ok, OldPid} ->
             Label = orddict:fetch(Tag, PeerLabels),
-            ?INFO("User ~p was resconnected from game ~p",[Label, Token]),
+            ?INFO("User ~s was resconnected from game ~p",[Label, Token]),
             send_safe(OldPid, #peer_change{session_pid = self()}),
             [ send_safe(P, #peer_reset{session_pid = self() }) || {T, P} <- PeerTags, T =/= Tag],
             NewPeerPid ! #game_start{
@@ -203,7 +203,7 @@ handle_cast(
 ) ->
     CurrentLabel = orddict:fetch(CurrentPeerTag, PeerLabels),
     NextLabel = orddict:fetch(NextPeerTag, PeerLabels),
-    ?INFO("~p surrendered to ~p",[CurrentLabel, NextLabel]),
+    ?INFO("~s surrendered to ~s",[CurrentLabel, NextLabel]),
     NextPeerPid = orddict:fetch(NextPeerTag, PeerTags),
     TurnValue = #peer_surrender{session_pid = self(), data = SurrenderData},
     send_safe(NextPeerPid, TurnValue),
@@ -226,7 +226,7 @@ handle_cast(
 ) ->
     CurrentLabel = orddict:fetch(CurrentPeerTag, PeerLabels),
     NextLabel = orddict:fetch(NextPeerTag, PeerLabels),
-    ?INFO("~p acknowledged its win to ~p",[CurrentLabel, NextLabel]),
+    ?INFO("~s acknowledged its win to ~s",[CurrentLabel, NextLabel]),
     [ send_safe(P, #game_stop{ session_pid = self(), token = Token, tag = T }) || {T, P} <- PeerTags ],
     {stop, normal, State};
 
@@ -252,7 +252,7 @@ handle_cast(
         peer_labels = [{_, FirstLabel}, {_, SecondLabel}]
     } = State
 ) ->
-    ?INFO("Game ~p of ~p vs. ~p cancelled by peer",[Token, FirstLabel, SecondLabel]),
+    ?INFO("Game ~p of ~s vs. ~s cancelled by peer",[Token, FirstLabel, SecondLabel]),
     [ send_safe(P, #game_stop{ session_pid = self(), token = Token, tag = T }) || {T, P} <- PeerTags ],
     {stop, normal, State};
 
@@ -271,7 +271,7 @@ handle_info(
     case lists:keyfind(Pid, 2, PeerTags) of
         {Tag, Pid} ->
             Label = orddict:fetch(Tag, PeerLabels),
-            ?INFO("User ~p was disconnected from game ~p",[Label, Token]),
+            ?INFO("User ~s was disconnected from game ~p",[Label, Token]),
             [ send_safe(P, #peer_lost{session_pid = self()}) || {T, P} <- PeerTags, T =/= Tag ],
             TimerId = make_ref(),
             erlang:send_after(reconnect_timeout(), self(), {reconnect_timeout, Tag, TimerId}),
@@ -296,7 +296,7 @@ handle_info(
     case orddict:find(Tag, ReconnectTimers) of
         {ok, TimerId} ->
             folsom_metrics:notify({?TIMEDOUT_GAMES_METRIC, 1}),
-            ?INFO("Game ~p vs ~p stopped because of ~p was not reconnected in time", [FirstLabel, SecondLabel, DisconnectedLabel]),
+            ?INFO("Game ~s vs ~s stopped because of ~s was not reconnected in time", [FirstLabel, SecondLabel, DisconnectedLabel]),
             {stop, normal, State};
         _ ->
             {noreply, State}

@@ -23,7 +23,15 @@
     decode_server_status_request/1,
     encode_server_status_request/1,
     encode_server_status_response/4,
-    get_basic_metrics/0
+    get_basic_metrics/0,
+    encode_peer_status/1,
+    encode_password_reset_request/1,
+    decode_password_reset_request/1,
+    encode_password_reset_response/1,
+    decode_commit_password_request/1,
+    encode_commit_password_result/1,
+    encode_register_request/3,
+    decode_register_request/1
 ]).
 
 make_server_frame(Iolist) ->
@@ -58,6 +66,25 @@ encode_auth_request(Login, Password) ->
         allign_string(Password, 32)
     ].
 
+encode_register_request(Login, Password, Email) ->
+    [
+        allign_string(Login, 32),
+        allign_string(Password, 32),
+        allign_string(Email, 64)
+    ].
+
+decode_register_request(Packet) ->
+    case Packet of
+        <<Login:32/binary, Password:32/binary, Email:64/binary>> ->
+            {ok, {
+                strip_trailing_zeros(Login),
+                strip_trailing_zeros(Password),
+                strip_trailing_zeros(Email)
+            }};
+        _ ->
+            {error, invalid_packet}
+    end.
+
 decode_auth_request(Packet) ->
     case Packet of
         <<Login:32/binary, Password:32/binary>> ->
@@ -80,6 +107,11 @@ encode_profile_request(RawProfile) ->
     Score = orddict:fetch(<<"score">>, Profile),
     Achievements = list_to_binary(orddict:fetch(<<"achievements">>, Profile)),
     Timestamp = orddict:fetch(<<"timestamp">>, Profile),
+    AllignedEmail =
+        case orddict:find(<<"email">>, Profile) of
+            {ok, Email} -> allign_string(Email, 64);
+            _ -> allign_string(<<"">>, 64)
+        end,
     <<
         Rank:4/unsigned-big-integer-unit:8,
         Experience:4/unsigned-big-integer-unit:8,
@@ -92,7 +124,8 @@ encode_profile_request(RawProfile) ->
         Reserved7:4/unsigned-big-integer-unit:8,
         Score:4/unsigned-big-integer-unit:8,
         Achievements:8/binary-unit:8,
-        Timestamp:8/unsigned-big-integer-unit:8
+        Timestamp:8/unsigned-big-integer-unit:8,
+        AllignedEmail:64/binary-unit:8
     >>.
 
 decode_profile_request(Packet) ->
@@ -108,7 +141,8 @@ decode_profile_request(Packet) ->
             Reserved7:4/unsigned-big-integer-unit:8,
             Score:4/unsigned-big-integer-unit:8,
             Achievements:8/binary-unit:8,
-            Timestamp:8/unsigned-big-integer-unit:8
+            Timestamp:8/unsigned-big-integer-unit:8,
+            Email:64/binary-unit:8
         >> ->
             Profile = [
                 {<<"rank">>, Rank},
@@ -122,7 +156,8 @@ decode_profile_request(Packet) ->
                 {<<"reserved7">>, Reserved7},
                 {<<"score">>, Score},
                 {<<"achievements">>, binary_to_list(Achievements)},
-                {<<"timestamp">>, Timestamp}
+                {<<"timestamp">>, Timestamp},
+                {<<"email">>, strip_trailing_zeros(Email)}
             ],
             {ok, Profile};
         _ ->
@@ -133,8 +168,8 @@ encode_top_response(Top) ->
     Count = length(Top),
     TopData =
         lists:foldl(
-            fun({Rank, Login}, Acc) ->
-                [<<Rank:4/unsigned-big-integer-unit:8>>, allign_string(Login, 32) | Acc]
+            fun({Login, Rank}, Acc) ->
+                [ [allign_string(Login, 32), <<Rank:4/unsigned-big-integer-unit:8>>] | Acc ]
             end, [], lists:reverse(Top)
         ),
     [
@@ -153,7 +188,9 @@ encode_auth_response(ok) ->
 encode_auth_response(incorrect_login) ->
     <<1>>;
 encode_auth_response(incorrect_password) ->
-    <<2>>.
+    <<2>>;
+encode_auth_response(already_authenticated) ->
+    <<3>>.
 
 decode_auth_response(<<2>>) ->
     {ok, incorrect_password};
@@ -172,6 +209,11 @@ decode_server_status_request(_) ->
 encode_server_status_request(ClientVersion) ->
     <<ClientVersion:2/big-unsigned-integer-unit:8>>.
 
+encode_peer_status(true) ->
+    <<1>>;
+encode_peer_status(false) ->
+   <<0>>.
+
 encode_server_status_response(IsVersionSupported, TotalConnections, RunningGames, WaitingGames) ->
     SupportedFlag = case IsVersionSupported of true -> 1; false -> 0 end,
     <<SupportedFlag,
@@ -185,3 +227,45 @@ get_basic_metrics() ->
     GamesWaiting = folsom_metrics:get_metric_value(?WAITING_GAMES_METRIC),
     GamesRunning = folsom_metrics:get_metric_value(?RUNNING_GAMES_METRIC),
     {ClientConnections, GamesRunning, GamesWaiting}.
+
+
+decode_password_reset_request(Data) ->
+    case Data of
+        <<_:32/binary-unit:8>> ->
+            {ok, strip_trailing_zeros(Data)};
+        _ ->
+            {error, invalid_packet}
+    end.
+
+encode_password_reset_request(Login) ->
+    allign_string(Login, 32).
+
+encode_password_reset_response(ok) ->
+    <<0>>;
+encode_password_reset_response(incorrect_login) ->
+    <<1>>.
+
+decode_commit_password_request(Data) ->
+    case Data of
+        <<
+            Login:32/binary-unit:8,
+            ConfirmationCode:32/binary-unit:8,
+            NewPassword:32/binary-unit:8
+        >> ->
+            {ok,
+                strip_trailing_zeros(Login),
+                strip_trailing_zeros(ConfirmationCode),
+                strip_trailing_zeros(NewPassword)
+            };
+        _ ->
+            {error, invalid_packet}
+    end.
+
+encode_commit_password_result(ok) ->
+    <<0>>;
+encode_commit_password_result(incorrect_login) ->
+    <<1>>;
+encode_commit_password_result(request_expired) ->
+    <<2>>;
+encode_commit_password_result(invalid_code) ->
+    <<3>>.

@@ -3,13 +3,14 @@
 -behaviour(application).
 
 -export([
-    register/2,
+    register/3,
     login/2,
     get_by_id/1,
     set_field/3,
     get_top/1,
     update_profile/2,
-    reinitialize/0
+    reinitialize/0,
+    change_password/2
 ]).
 
 -compile([
@@ -118,13 +119,13 @@ get_by_id(Login) ->
             Error
     end.
 
-register(Login, Password) ->
-    ?DEBUG("Registering ~p in database",[Login]),
+register(Login, Password, Email) ->
+    ?DEBUG("Registering ~p (~p) in database",[Login, Email]),
     {BackendModule, BackendState} = get_backend(),
     folsom_metrics:notify({?REGISTER_METRIC, 1}),
     case BackendModule:get_by_id(Login, BackendState) of
         {error, not_found} ->
-            create_profile(Login, Password);
+            create_profile(Login, Password, Email);
         {ok, _} ->
             folsom_metrics:notify({?FAIL_REGISTER_METRIC, 1}),
             {error, already_registered};
@@ -135,10 +136,10 @@ register(Login, Password) ->
 
 
 
-create_profile(Login, Password) ->
+create_profile(Login, Password, Email) ->
     ?NOTICE("Registering ~p in database",[Login]),
     {BackendModule, BackendState} = get_backend(),
-    case BackendModule:create_profile( init_profile(Login, Password), BackendState) of
+    case BackendModule:create_profile( init_profile(Login, Password, Email), BackendState) of
         {ok, {Doc}} ->
             {ok, Doc};
         {error, _} = Error ->
@@ -189,13 +190,26 @@ update_profile(NewProfileVersion, Login) ->
     end.
 
 
+change_password(Profile, NewPassword) ->
+    NewProfile = [
+        {<<"password">>, bin_to_hex(crypto:hash(md5, NewPassword))}
+        | proplists:delete(<<"password">>, Profile)
+    ],
+    {BackendModule, BackendState} = get_backend(),
+    case BackendModule:create_profile( {NewProfile}, BackendState ) of
+        {ok, {Doc}} ->
+            {ok, Doc};
+        {error, _} = Error ->
+            Error
+    end.
+
 update_fields(Profile, NewProfileVersion) ->
     SortedProfile = orddict:from_list(Profile),
     UpdateFields = [
         <<"rank">>, <<"experience">>, <<"achievements">>,
         <<"reserved1">>, <<"reserved2">>, <<"reserved3">>,
         <<"reserved4">>, <<"reserved5">>, <<"reserved6">>,
-        <<"reserved7">>, <<"score">>
+        <<"reserved7">>, <<"score">>, <<"email">>
     ],
     Tmp =
         lists:foldl(
@@ -219,9 +233,10 @@ get_backend() ->
 password_correct(Password, Profile) ->
     bin_to_hex(crypto:hash(md5, Password)) == proplists:get_value(<<"password">>, Profile).
 
-init_profile(Login, Password) ->
+init_profile(Login, Password, Email) ->
     {[
         {<<"_id">>, Login},
+        {<<"email">>, Email},
         {<<"password">>, bin_to_hex(crypto:hash(md5, Password))},
         {<<"rank">>, 0},
         {<<"experience">>, 0},

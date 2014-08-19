@@ -95,12 +95,12 @@ ensure_views(Db) ->
         true ->
             ok;
         false ->
-            ?WARNING("Design document 'uses' not found in database, creating new one from ~p",[code:priv_dir(database)]),
+            ?WARNING("Design document 'users' not found in database, creating new one from ~p",[code:priv_dir(database)]),
             case couchbeam:save_doc(Db, DesignDoc) of
                 {ok, _} ->
-                    ?WARNING("Design document 'uses' successfully created",[]),
+                    ?WARNING("Design document 'users' successfully created",[]),
                     ok;
                 Error ->
-                    ?CRITICAL("Failed to create design document 'uses' because of ~p",[Error])
+                    ?CRITICAL("Failed to create design document 'users' because of ~p",[Error])
             end
     end.
