@@ -107,11 +107,6 @@ encode_profile_request(RawProfile) ->
     Score = orddict:fetch(<<"score">>, Profile),
     Achievements = list_to_binary(orddict:fetch(<<"achievements">>, Profile)),
     Timestamp = orddict:fetch(<<"timestamp">>, Profile),
-    AllignedEmail =
-        case orddict:find(<<"email">>, Profile) of
-            {ok, Email} -> allign_string(Email, 64);
-            _ -> allign_string(<<"">>, 64)
-        end,
     <<
         Rank:4/unsigned-big-integer-unit:8,
         Experience:4/unsigned-big-integer-unit:8,
@@ -124,8 +119,7 @@ encode_profile_request(RawProfile) ->
         Reserved7:4/unsigned-big-integer-unit:8,
         Score:4/unsigned-big-integer-unit:8,
         Achievements:8/binary-unit:8,
-        Timestamp:8/unsigned-big-integer-unit:8,
-        AllignedEmail:64/binary-unit:8
+        Timestamp:8/unsigned-big-integer-unit:8
     >>.
 
 decode_profile_request(Packet) ->
@@ -141,8 +135,7 @@ decode_profile_request(Packet) ->
             Reserved7:4/unsigned-big-integer-unit:8,
             Score:4/unsigned-big-integer-unit:8,
             Achievements:8/binary-unit:8,
-            Timestamp:8/unsigned-big-integer-unit:8,
-            Email:64/binary-unit:8
+            Timestamp:8/unsigned-big-integer-unit:8
         >> ->
             Profile = [
                 {<<"rank">>, Rank},
@@ -156,8 +149,7 @@ decode_profile_request(Packet) ->
                 {<<"reserved7">>, Reserved7},
                 {<<"score">>, Score},
                 {<<"achievements">>, binary_to_list(Achievements)},
-                {<<"timestamp">>, Timestamp},
-                {<<"email">>, strip_trailing_zeros(Email)}
+                {<<"timestamp">>, Timestamp}
             ],
             {ok, Profile};
         _ ->
