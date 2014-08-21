@@ -13,6 +13,11 @@
 -export([start_link/1]).
 
 -export([
+    manual_reset/2,
+    manual_reset/3
+]).
+
+-export([
     request/2,
     commit/2
 ]).
@@ -39,6 +44,30 @@
 
 start_link(Params) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, Params, []).
+
+manual_reset(Login, Email) ->
+    manual_reset(ensure_utf(Login), ensure_utf(Email), database).
+
+manual_reset(Login, Email, ProfileBackend) ->
+    case ProfileBackend:get_by_id(Login) of
+        {ok, Profile} ->
+            ActualEmail = proplists:get_value(<<"email">>, Profile),
+            case ActualEmail =:= Email of
+                true ->
+                    ConfirmationCode = get_random_string(?CONFIRMATION_CODE_LENGTH, "1234567890"),
+                    ok = gen_server:call(?SERVER, {request, Login, ConfirmationCode}),
+                    {ok, ConfirmationCode};
+                false ->
+                    {error, invalid_email, ActualEmail}
+            end;
+        Error ->
+            Error
+    end.
+
+ensure_utf(Binary) when is_binary(Binary) ->
+    Binary;
+ensure_utf(List) when is_list(List) ->
+    unicode:characters_to_binary(List).
 
 request(Login, Profile) ->
     Email = proplists:get_value(<<"email">>, Profile),
