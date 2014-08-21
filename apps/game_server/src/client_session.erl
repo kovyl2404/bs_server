@@ -143,7 +143,7 @@ guest(
                 CommitResult =
                     case password_manager:commit(Login, ConfirmationCode) of
                         ok ->
-                            ok = ProfileBackend:change_password(Login, NewPassword),
+                            ok = ProfileBackend:change_password(Profile, NewPassword),
                             ok;
                         {error, Reason} ->
                             Reason
@@ -322,11 +322,11 @@ idle(
     {ok, Login, ConfirmationCode, NewPassword} = session_utils:decode_commit_password_request(RequestData),
     SendFrame =
         case ProfileBackend:get_by_id(Login) of
-            {ok, _} ->
+            {ok, Profile} ->
                 CommitResult =
                     case password_manager:commit(Login, ConfirmationCode) of
                         ok ->
-                            ok = ProfileBackend:change_password(Login, NewPassword),
+                            ok = ProfileBackend:change_password(Profile, NewPassword),
                             ok;
                         {error, Reason} ->
                             Reason
