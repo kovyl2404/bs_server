@@ -69,7 +69,7 @@ send_ping(Session, SeqId) ->
 
 init({Socket, Transport, PeerName}) ->
     ProfileBackend = profile_backend(),
-    random:seed(),
+    random:seed(erlang:now()),
     InitState =
         case ProfileBackend of
             undefined -> idle;
@@ -143,7 +143,7 @@ guest(
                 CommitResult =
                     case password_manager:commit(Login, ConfirmationCode) of
                         ok ->
-                            ok = ProfileBackend:change_password(Profile, NewPassword),
+                            {ok, _} = ProfileBackend:change_password(Profile, NewPassword),
                             ok;
                         {error, Reason} ->
                             Reason
@@ -326,7 +326,7 @@ idle(
                 CommitResult =
                     case password_manager:commit(Login, ConfirmationCode) of
                         ok ->
-                            ok = ProfileBackend:change_password(Profile, NewPassword),
+                            {ok, _} = ProfileBackend:change_password(Profile, NewPassword),
                             ok;
                         {error, Reason} ->
                             Reason
