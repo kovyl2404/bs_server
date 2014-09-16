@@ -438,7 +438,7 @@ waiting_for_game(
     } = State
 ) when Token =/= reconnecting ->
     ?DEBUG("Client session ~p (~s) received request to cancel game ~p", [self(), _PeerName, Token]),
-    {ok, _} = game_lobby:cancel(Token),
+    game_lobby:cancel(Token),
     {next_state, waiting_for_game, State};
 
 waiting_for_game(
@@ -490,7 +490,7 @@ running_game(
     } = State
 ) ->
     ?DEBUG("Client session ~p (~s) received request to cancel game ~p", [self(), _PeerName, Token]),
-    {ok, _} = game_lobby:cancel(Token),
+    game_lobby:cancel(Token),
     {next_state, stopping_game, State};
 
 
@@ -601,7 +601,7 @@ handle_info(
             }};
         _Error ->
             ?DEBUG("Client session ~p (~s) failed to start game, because of socket error ~p", [self(), _PeerName, Token, _Error]),
-            {ok, _} = game_lobby:cancel(Token),
+            game_lobby:cancel(Token),
             {stop, normal, State}
     end;
 
