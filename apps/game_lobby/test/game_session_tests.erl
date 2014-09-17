@@ -82,7 +82,13 @@ first_peer_lost_test_() ->
             ok = lobby_utils:wait_process_down(MonitorRef, 100),
             PeerLost = lobby_utils:wait_peer_lost(SessionPid, 100),
 
-            {SessionShutdownTime, SessionShutdown} = timer:tc( fun() -> lobby_utils:wait_process_down(SessionMonitor, 2500) end ),
+            {SessionShutdownTime, SessionShutdown} =
+                timer:tc(
+                    fun() ->
+                        lobby_utils:wait_process_down(SessionMonitor, 2500)
+                    end
+                ),
+            {ok, _} = lobby_utils:wait_game_stop(some_token, 100),
             [
                 ?_assertMatch(
                     {ok, #peer_lost{session_pid = SessionPid }},
@@ -194,6 +200,7 @@ peer_multiple_reconnects_test_() ->
             {ok, _} = lobby_utils:wait_peer_lost(SessionPid, 100),
 
             {SessionShutdownTime, ok} = timer:tc( fun() -> lobby_utils:wait_process_down(SessionMonitor, 5000) end ),
+            {ok, _} = lobby_utils:wait_game_stop(some_token, 100),
 
             [
                 ?_assert( SessionShutdownTime >= 1500000 andalso SessionShutdownTime =< 2500000)
@@ -245,6 +252,7 @@ illegal_turn_test_() ->
             ValidTurnResult = lobby_utils:wait_peer_turn(SessionPid, 100),
 
             {SessionShutdownTime, SessionShutdown} = timer:tc( fun() -> lobby_utils:wait_process_down(SessionMonitor, 2500) end ),
+            {ok, _} = lobby_utils:wait_game_stop(some_token, 100),
             [
                 ?_assertMatch( {error, timeout}, TurnResult ),
                 ?_assertMatch( {ok, #illegal_turn{session_pid = SessionPid}}, TurnError ),
@@ -284,7 +292,7 @@ reconnect_after_illegal_turn_test_() ->
             TurnError = lobby_utils:wait_peer_turn_fail(SessionPid, 100),
             PeerLost = lobby_utils:wait_peer_lost(SessionPid, 100),
             {SessionShutdownTime, SessionShutdown} = timer:tc( fun() -> lobby_utils:wait_process_down(SessionMonitor, 2500) end ),
-
+            {ok, _} = lobby_utils:wait_game_stop(some_token, 100),
             [
                 ?_assertMatch({ok, #game_start{session_pid = SessionPid, tag = <<"blue">>, token = some_token, turn = false}}, GameStart),
                 ?_assertEqual({ok, #peer_reset{session_pid = SessionPid}}, PeerReset),
@@ -380,9 +388,11 @@ reconnect_expired_session_test_() ->
                 ),
             MonitorRef = monitor(process, SessionPid),
             {ok, _} = lobby_utils:wait_game_start(100),
+            GameStopResult = lobby_utils:wait_game_stop(some_token, 2500),
             ok = lobby_utils:wait_process_down(MonitorRef, 2500),
             SetPeerResult = game_session:set_peer(SessionPid, #peer_id{tag = <<"blue">>, client_pid = self()}),
             [
+                ?_assertMatch({ok, #game_stop{}}, GameStopResult),
                 ?_assertMatch({error, session_expired}, SetPeerResult)
             ]
         end
@@ -421,7 +431,6 @@ stop_game_in_turn_test_() ->
             GameStopResult = lobby_utils:wait_game_stop(some_token, 100),
             SessionDownResult = lobby_utils:wait_process_down(MonitorRef, 100),
             {ok, PeerStopResult} = lobby_utils:wait_from_pid(ClientPid, 100),
-
             [
                 ?_assertMatch(
                     {ok, #game_stop{ token = some_token, tag = <<"red">>, session_pid = SessionPid} },
