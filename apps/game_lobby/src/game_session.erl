@@ -288,6 +288,7 @@ handle_info(
     #state{
         reconnect_timers = ReconnectTimers,
         peer_labels = PeerLabels,
+        peer_tags = PeerTags,
         game_token = Token
     } = State
 ) ->
