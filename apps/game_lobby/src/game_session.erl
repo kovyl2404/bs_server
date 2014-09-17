@@ -288,11 +288,12 @@ handle_info(
     #state{
         reconnect_timers = ReconnectTimers,
         peer_labels = PeerLabels,
-        game_token = _Token
+        game_token = Token
     } = State
 ) ->
     DisconnectedLabel = orddict:fetch(Tag, PeerLabels),
     [{_, FirstLabel}, {_, SecondLabel}] = PeerLabels,
+    [ send_safe(P, #game_stop{session_pid = self(), token = Token, tag = T}) || {T, P} <- PeerTags, T =/= Tag ],
     case orddict:find(Tag, ReconnectTimers) of
         {ok, TimerId} ->
             folsom_metrics:notify({?TIMEDOUT_GAMES_METRIC, 1}),
